@@ -1,0 +1,7 @@
+# Install into the same Linux venv as requirements-linux-cpu.txt to avoid duplication.
+# The +cpu pins prevent pip from pulling the large CUDA runtime dependencies.
+--extra-index-url https://download.pytorch.org/whl/cpu
+-r requirements-linux-cpu.txt
+torch==2.14.0+cpu
+torchvision==0.29.0+cpu
+audio-separator[cpu]==0.47.0

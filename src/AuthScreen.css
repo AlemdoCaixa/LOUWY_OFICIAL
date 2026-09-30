@@ -1,0 +1,88 @@
+.auth-page{min-height:100vh;display:grid;grid-template-columns:minmax(300px,.8fr) minmax(420px,1.2fr);background:#0b0d10}.auth-brand-panel{position:relative;overflow:hidden;padding:48px;display:flex;flex-direction:column;justify-content:space-between;background:linear-gradient(145deg,rgba(216,255,85,.16),transparent 48%),#11151a;border-right:1px solid #242a30}.auth-brand-panel:after{content:"♪";position:absolute;right:-35px;bottom:-95px;font-size:330px;font-weight:900;color:rgba(216,255,85,.07);transform:rotate(7deg)}.auth-logo{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;background:#d8ff55;color:#101316}.auth-brand-panel h1{font-size:52px;margin:10px 0 8px;letter-spacing:-2.2px}.auth-brand-panel p{max-width:390px;color:#9ba4ae;line-height:1.6}.auth-feature{position:relative;z-index:1;max-width:430px;display:flex;gap:10px;align-items:flex-start;padding:14px;border:1px solid #2b3223;border-radius:14px;background:rgba(20,25,17,.75);color:#bfc9a2;font-size:12px;line-height:1.5}.auth-form-panel{display:grid;place-items:center;padding:30px}.auth-card{width:min(440px,100%);padding:30px;border:1px solid #292f36;border-radius:24px;background:#11151a;box-shadow:0 30px 100px rgba(0,0,0,.35)}.auth-icon{width:48px;height:48px;display:grid;place-items:center;border-radius:14px;background:#d8ff55;color:#101316;margin-bottom:20px}.auth-card h2{font-size:29px;letter-spacing:-1px;margin:6px 0 8px}.auth-card>p{color:#8f98a3;font-size:13px;line-height:1.55;margin-bottom:22px}.auth-field{display:grid;gap:7px;margin-top:13px}.auth-field>span{font-size:10px;color:#8d97a2;font-weight:800;letter-spacing:.5px}.auth-field>div{display:flex;align-items:center;gap:8px;border:1px solid #30363d;border-radius:12px;padding:0 12px;background:#0b0e12;color:#727c87}.auth-field input{width:100%;min-height:44px;border:0;outline:0;background:transparent;color:#fff}.auth-field>input{border:1px solid #30363d;border-radius:12px;padding:0 12px;background:#0b0e12}.auth-field>div:focus-within,.auth-field>input:focus{border-color:#d8ff55}.auth-submit{width:100%;min-height:46px;margin-top:20px;border:0;border-radius:12px;background:#d8ff55;color:#101316;font-weight:850}.auth-submit:disabled{opacity:.55;cursor:not-allowed}.auth-error{margin-top:13px;padding:10px 12px;border-radius:10px;background:#2a1517;color:#ffb1b7;font-size:11px}.auth-back{display:flex;align-items:center;gap:5px;border:0;background:transparent;color:#8d97a2;padding:0;margin-bottom:17px}.auth-back:hover{color:#d8ff55}@media(max-width:820px){.auth-page{grid-template-columns:1fr}.auth-brand-panel{min-height:230px;padding:28px;border-right:0;border-bottom:1px solid #242a30}.auth-brand-panel h1{font-size:39px}.auth-feature{display:none}.auth-form-panel{padding:18px}.auth-card{padding:23px}}@media(max-width:520px){.auth-brand-panel{min-height:180px}.auth-brand-panel p{font-size:12px}.auth-card{border-radius:18px}}
+
+.auth-page,.auth-form-panel,.auth-card{min-width:0}.auth-page{overflow-x:hidden}.auth-card>p{overflow-wrap:anywhere}@media(max-width:520px){.auth-form-panel{width:100%;padding:16px}.auth-card{width:100%;max-width:100%;padding:22px}.auth-brand-panel{width:100%;padding:27px 22px}.auth-field>div{min-width:0}.auth-field input{min-width:0}}
+
+/* Louwy SaaS · identidade da organização */
+.auth-brand-panel{--tenant-accent:#d8ff55}
+.auth-brand-panel .auth-icon,.auth-brand-panel~.auth-form-panel .auth-icon,.auth-submit{background:var(--tenant-accent);color:#101316}
+.auth-product-mark{position:relative;z-index:2;display:flex;align-items:center;gap:10px}
+.auth-product-mark>span{width:46px;height:46px;display:grid;place-items:center;border-radius:14px;background:var(--tenant-accent);color:#101316}
+.auth-product-mark>div{display:grid;gap:1px}
+.auth-product-mark small{color:#7f8993;font-size:7px;font-weight:800;letter-spacing:.7px;text-transform:uppercase}
+.auth-product-mark strong{font-size:20px;letter-spacing:-.6px}
+.auth-ministry-lockup{position:relative;z-index:1;display:grid;justify-items:start;min-width:0}
+.auth-ministry-lockup>img{display:block;width:min(500px,100%);height:145px;max-height:145px;object-fit:contain;object-position:left center;margin-bottom:22px;filter:drop-shadow(0 16px 35px rgba(205,147,25,.18))}
+.auth-logo-fallback{width:110px;height:90px;display:grid;place-items:center;margin-bottom:22px;border:1px solid #303b28;border-radius:16px;background:#151b12;color:var(--tenant-accent)}
+.auth-ministry-lockup h1{max-width:540px;font-size:clamp(38px,5vw,54px);margin:8px 0;letter-spacing:-2px;overflow-wrap:anywhere}
+.auth-ministry-lockup p{max-width:440px;color:#9ba4ae;line-height:1.6}
+.auth-feature{border-color:color-mix(in srgb,var(--tenant-accent) 20%,#2b3223)}
+@media(max-width:820px){.auth-brand-panel{min-height:310px}.auth-ministry-lockup>img{width:min(400px,90%);height:110px;max-height:110px;margin-bottom:16px}.auth-ministry-lockup h1{font-size:38px}.auth-product-mark strong{font-size:18px}}
+@media(max-width:520px){.auth-brand-panel{min-height:285px}.auth-ministry-lockup>img{width:min(335px,96%);height:88px;max-height:88px}.auth-ministry-lockup h1{font-size:32px}.auth-product-mark>span{width:42px;height:42px}}
+
+/* Louwy sem ícone musical e sem nome textual da organização */
+.auth-product-mark{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.auth-product-mark>strong{font-size:21px;letter-spacing:-.7px;color:#fff}
+.auth-product-mark>span{width:auto;height:auto;display:inline;background:transparent;border-radius:0;color:#8e98a2;font-size:10px;font-weight:650;letter-spacing:0;text-transform:none}
+.auth-ministry-lockup{gap:10px}
+.auth-ministry-lockup>img{margin-bottom:6px}
+.auth-ministry-lockup>p{margin:0;max-width:440px;color:#9ba4ae;line-height:1.6}
+@media(max-width:520px){.auth-product-mark{gap:6px}.auth-product-mark>strong{font-size:19px}.auth-product-mark>span{font-size:9px}.auth-ministry-lockup>img{margin-bottom:2px}}
+
+/* Cor da organização: acesso */
+.auth-brand-panel { --tenant-accent:inherit; }
+.auth-brand-panel {
+  background:linear-gradient(145deg,color-mix(in srgb,var(--tenant-accent) 16%,transparent),transparent 48%),#11151a;
+}
+.auth-brand-panel:after { color:color-mix(in srgb,var(--tenant-accent) 7%,transparent); }
+.auth-icon,.auth-submit {
+  background:var(--tenant-accent);
+  color:#101316;
+}
+.auth-field>div:focus-within,.auth-field>input:focus { border-color:var(--tenant-accent); }
+.auth-back:hover { color:var(--tenant-accent); }
+.auth-feature {
+  border-color:color-mix(in srgb,var(--tenant-accent) 20%,#2b3223);
+  background:color-mix(in srgb,var(--tenant-accent) 7%,rgba(20,25,17,.75));
+  color:color-mix(in srgb,var(--tenant-accent) 42%,#d7dde2);
+}
+
+/* Cadastro e seleção de igrejas */
+.auth-secondary-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.auth-secondary-actions button{min-height:38px;display:flex;align-items:center;justify-content:center;gap:6px;border:1px solid #2d343b;border-radius:10px;background:#151a1f;color:#9aa4ad;font-size:9px;font-weight:750}
+.auth-secondary-actions button:hover{border-color:var(--tenant-accent);color:#eef2f4;background:color-mix(in srgb,var(--tenant-accent) 8%,#151a1f)}
+.church-url-preview{margin-top:7px;padding:8px 10px;border:1px solid color-mix(in srgb,var(--tenant-accent) 30%,#30363d);border-radius:9px;background:color-mix(in srgb,var(--tenant-accent) 7%,#0b0e12);color:var(--tenant-accent);font-size:10px;font-weight:750;overflow-wrap:anywhere}
+.auth-card .auth-field>input{min-height:46px}
+@media(max-width:520px){.auth-secondary-actions{grid-template-columns:1fr}.auth-secondary-actions button{min-height:42px}}
+
+/* Identidade do Louwy nas telas institucionais de acesso e cadastro */
+.institutional-auth-page .auth-brand-panel{
+  background:radial-gradient(circle at 8% 2%,rgba(0,255,188,.08),transparent 25rem),linear-gradient(145deg,rgba(13,21,93,.34),transparent 55%),#11151a;
+}
+.institutional-auth-product{align-items:center;gap:12px;flex-wrap:nowrap}
+.institutional-auth-product>img{display:block;width:150px;height:auto;max-height:56px;object-fit:contain;object-position:left center}
+.institutional-auth-product>span{white-space:nowrap}
+.institutional-auth-page .auth-institutional-message{max-width:520px;gap:18px}
+.institutional-auth-page .auth-institutional-title{
+  max-width:500px;margin:0;color:#f4f7f8;font-size:clamp(38px,4.8vw,64px);
+  line-height:.98;letter-spacing:-3px;text-wrap:balance;
+}
+.institutional-auth-page .auth-institutional-message>p{max-width:470px;font-size:17px;line-height:1.55}
+.institutional-auth-page .auth-icon,.institutional-auth-page .auth-submit{
+  background:#00ffbc;color:#071c2a;box-shadow:0 12px 34px rgba(0,255,188,.16);
+}
+.institutional-auth-page .auth-submit:hover:not(:disabled){filter:brightness(1.04);transform:translateY(-1px)}
+.institutional-auth-page .auth-field>div:focus-within,.institutional-auth-page .auth-field>input:focus{border-color:#00ffbc}
+.institutional-auth-page .auth-back:hover{color:#00ffbc}
+@media(max-width:820px){
+  .institutional-auth-product>img{width:136px;max-height:50px}
+  .institutional-auth-page .auth-institutional-message{gap:10px}
+  .institutional-auth-page .auth-institutional-title{font-size:38px;letter-spacing:-2px}
+  .institutional-auth-page .auth-institutional-message>p{font-size:14px}
+}
+@media(max-width:520px){
+  .institutional-auth-product{gap:8px}
+  .institutional-auth-product>img{width:116px;max-height:44px}
+  .institutional-auth-product>span{font-size:8px}
+  .institutional-auth-page .auth-institutional-title{font-size:32px;letter-spacing:-1.5px}
+  .institutional-auth-page .auth-institutional-message>p{font-size:12px}
+}

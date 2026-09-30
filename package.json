@@ -1,0 +1,45 @@
+{
+  "name": "louwy",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint",
+    "preview": "vite preview",
+    "server": "node --env-file=.env.local server/index.mjs",
+    "dev:all": "concurrently -k -n api,pwa -c magenta,cyan \"npm run server\" \"npm run dev\"",
+    "db:migrate": "node --env-file=.env.local server/migrate-state.mjs",
+    "db:backup": "node --env-file=.env.local server/backup-db.mjs",
+    "test:auth-ui": "node server/test-frontend-ui.mjs",
+    "test:audio": "node --test server/test-audio-session.mjs",
+    "test:import": "node --test server/test-import-song.mjs",
+    "test:import-ui": "node server/test-import-ui.mjs",
+    "test": "node --test server/plans.test.mjs server/mercadopago.test.mjs server/backend.test.mjs",
+    "test:lyrics": "python3 -m unittest discover -s server -p test_transcribe_lyrics.py",
+    "test:multi-church": "node --env-file=.env.local server/test-multi-church-local.mjs",
+    "test:multi-church-ui": "node --env-file=.env.local server/test-multi-church-ui.mjs"
+  },
+  "dependencies": {
+    "concurrently": "^10.0.5",
+    "express": "^5.2.1",
+    "lucide-react": "^1.48.0",
+    "multer": "^2.4.0",
+    "pg": "^8.23.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "tone": "^15.1.22",
+    "vite-plugin-pwa": "^1.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "oxlint": "^1.81.0",
+    "puppeteer-core": "^25.12.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.3.0"
+  }
+}
