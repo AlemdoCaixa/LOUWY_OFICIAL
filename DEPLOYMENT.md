@@ -71,26 +71,22 @@ nginx -t
 df -h /
 ```
 
-A importação usa `YTDLP_PROXY=socks5h://127.0.0.1:11881`. Em 02/10/2026,
-a porta estava sem listener e todas as tentativas recentes falhavam com
+A importação utiliza um proxy definido em `YTDLP_PROXY`. Em 02/10/2026, essa
+conexão estava sem listener e todas as tentativas recentes falhavam com
 `Connection refused`. A rota direta, inclusive IPv6, retornava desafio de robô.
-Foi recuperado um túnel privado com chave exclusiva e conta SSH `louwy-proxy`,
-sem shell e limitada ao encaminhamento remoto de `127.0.0.1:11881`.
-O proxy depende do Mac autorizado ligado e conectado. Consulte
+A conexão de saída foi recuperada com autorização do responsável, chave
+exclusiva e acesso limitado ao encaminhamento necessário. Consulte
 `deploy/YOUTUBE_PROXY.md` para operação e a pendência de instalação no login.
 
-O backend agora verifica o proxy antes de chamar o extrator e devolve
+O backend verifica o proxy antes de chamar o extrator e devolve
 `YOUTUBE_PROXY_UNAVAILABLE` nas APIs síncrona e assíncrona. O frontend mantém
-o fluxo atual, com fila, consulta de progresso e reconhecimento de duplicatas.
+o fluxo atual de fila, progresso e reconhecimento de duplicatas.
 
-Também foi reparada a dependência de detecção de tom: o `.pth` do ambiente
-apontava para `/opt/rubituci-ai/venv/lib/python3.12/site-packages`, que não existe
-mais. `numpy==2.2.6` e dependências faltantes do librosa foram instalados
-diretamente no ambiente do Louwy, sem atualizar o yt-dlp ou alterar outro app.
-As dependências de torch/transcrição desse antigo compartilhamento precisam
-de manutenção separada; a separação de instrumentos não foi validada nesta correção.
+A detecção de tom também foi reparada: o ambiente externo referenciado por
+um `.pth` deixou de existir. NumPy e dependências faltantes do librosa foram
+instalados no próprio ambiente do Louwy. As dependências de separação e
+transcrição desse antigo compartilhamento precisam de manutenção separada;
+a separação de instrumentos não foi validada nesta correção.
 
-Backup do banco, ambiente e caminho da release anterior:
-`/root/migration-louwy-20260927/youtube-recovery-20261002`.
-O retorno do código pode ser feito apontando `/opt/louwy/current` para o caminho
-salvo em `previous-release` e reiniciando apenas `louwy.service`.
+O banco, ambiente e caminho da release anterior foram preservados. Os caminhos
+privados e o procedimento de retorno foram entregues no relatório local.

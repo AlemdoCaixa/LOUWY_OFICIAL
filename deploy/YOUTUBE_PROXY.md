@@ -1,62 +1,22 @@
-# Proxy de importação do YouTube — 02/10/2026
+# Operação do proxy de importação do YouTube
 
-## Diagnóstico
+O frontend envia uma solicitação assíncrona, acompanha o progresso e recebe a música ou um erro do backend. O extrator utiliza a rota definida em `YTDLP_PROXY` para metadados e download. A indisponibilidade dessa rota deve ser reparada no proxy, sem remover sua configuração e enviar automaticamente as mesmas tentativas pelo IP bloqueado do host.
 
-O backend e o banco PostgreSQL do Louwy estavam ativos. A importação não utiliza
-Supabase. `YTDLP_PROXY` apontava para `socks5h://127.0.0.1:11881`, mas nenhum
-processo escutava nessa porta. Os logs de 02/10 mostravam recusa de conexão
-antes da extração de metadados. Testes sem proxy em IPv4 e IPv6 retornaram
-`Sign in to confirm you're not a bot`.
+O backend verifica a disponibilidade TCP do proxy antes de invocar o extrator. Uma porta fechada ou configuração inválida retorna `YOUTUBE_PROXY_UNAVAILABLE`; um erro posterior de conexão também é traduzido para essa categoria. Essa verificação não garante, sozinha, acesso ao YouTube. É necessário testar um vídeo público com as mesmas opções usadas pelo serviço.
 
-O MacBook Air conectado à integração antiga estava offline. Não foi possível
-comprovar que ele hospedava o túnel anterior; não havia serviço de proxy
-registrado no systemd do servidor.
+Um túnel mantido por uma máquina externa deve ter uma chave exclusiva, verificação da chave do servidor, conta sem shell e encaminhamento limitado ao endereço e à porta necessários. O endereço de escuta deve ser privado. Use keepalives, supervisão e reconexão após falhas de rede.
 
-## Conexão recuperada
+O uso de um Mac como saída exige que ele esteja acordado e conectado. Para iniciar após login, instale um agente com `RunAtLoad`, `KeepAlive` e intervalo de reinício. O supervisor da sessão atual não substitui o agente de login. Não mantenha dois supervisores concorrendo pela mesma porta.
 
-O responsável autorizou o uso da internet do Mac atual. Uma chave exclusiva
-autentica `louwy-proxy@77.42.46.50`. A conta não permite shell, PTY,
-encaminhamento local, encaminhamento do agente nem X11. A única porta remota
-permitida é `127.0.0.1:11881`; ela não fica exposta na interface pública.
-
-Configuração SSH do servidor:
-`/etc/ssh/sshd_config.d/60-louwy-youtube-proxy.conf`.
-Chave pública restrita: `/home/louwy-proxy/.ssh/authorized_keys`.
-O arquivo `runtime.env` do Louwy mantém os parâmetros existentes de proxy,
-Node e componentes EJS. Não foram obtidos nem exportados cookies de navegador.
-
-No Mac autorizado, os arquivos privados e o supervisor ficam em
-`/Users/rubituci/Documents/Codex/louwy-proxy`. A chave privada não deve ir para
-o Git, relatórios ou arquivos de distribuição. `reconnect.sh` mantém o túnel
-e tenta reconectar após 15 segundos; os keepalives detectam quedas da sessão.
-
-## Pendência no login do Mac
-
-Foi preparado `com.louwy.youtube-proxy.plist` com `RunAtLoad`, `KeepAlive`,
-`ThrottleInterval=15`, verificação da chave do servidor e credencial exclusiva.
-O ambiente do Codex bloqueou escrita em `~/Library/LaunchAgents` e controle
-do Terminal, mesmo após a autorização do responsável. O instalador entregue
-precisa ser executado pelo usuário para habilitar o início automático no login.
-Não considerar essa etapa instalada até verificar o serviço no launchd.
-
-O supervisor em execução mantém reconexão durante a sessão atual. Após instalar
-o agente, o instalador encerra o supervisor para evitar dois túneis concorrentes.
-O Mac precisa permanecer acordado e online. Para operação independente do Mac,
-é necessário substituir essa rota por um proxy de saída permanente autorizado.
+Em 02/10/2026, a conexão foi recuperada com autorização do responsável. A instalação do agente de login ficou pendente por restrições das ferramentas locais. Os detalhes privados, instalador e instruções de ativação foram entregues ao responsável em relatório local; nenhuma chave privada deve ser publicada no Git.
 
 ## Verificação
 
-1. Confirmar listener apenas em `127.0.0.1:11881` no servidor.
-2. Consultar metadados e baixar áudio como usuário `louwy`, usando o mesmo proxy.
-3. Testar `POST /api/import` com `asynchronous: true` e consultar
-   `GET /api/import-jobs/:jobId` até `ready`.
+1. Confirmar a escuta do proxy apenas no endereço privado configurado.
+2. Consultar metadados e baixar áudio como o usuário do serviço, pela mesma rota.
+3. Testar `POST /api/import` com `asynchronous: true` e consultar `GET /api/import-jobs/:jobId` até `ready`.
 4. Verificar tom detectado, item único no catálogo, MP3 e leitura parcial HTTP 206.
 5. Confirmar duplicata sem novo download e rejeição de domínio imitador do YouTube.
+6. Simular indisponibilidade em teste isolado e confirmar o erro específico nas APIs síncrona e assíncrona.
 
-O preflight é uma verificação TCP de disponibilidade do proxy. Não comprova,
-sozinho, disponibilidade do YouTube; os testes reais de extração são necessários.
-Os testes automatizados cobrem proxy ativo, recusa de conexão, configuração
-inválida, erro nas duas modalidades da API e catálogo existente durante a queda.
-
-Referências do extrator: [releases oficiais](https://github.com/yt-dlp/yt-dlp/releases)
-e [guia oficial de extração](https://github.com/yt-dlp/yt-dlp/wiki/Extractors).
+Referências: [releases oficiais do yt-dlp](https://github.com/yt-dlp/yt-dlp/releases) e [guia oficial de extração](https://github.com/yt-dlp/yt-dlp/wiki/Extractors).
