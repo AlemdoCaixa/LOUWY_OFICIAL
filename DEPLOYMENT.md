@@ -10,7 +10,7 @@ Servidor: `root@77.42.46.50`.
 
 ## Louwy
 
-- Release ativa: `/opt/louwy/releases/20260927T202401Z-multichurch`, apontada por `/opt/louwy/current`.
+- Release ativa: `/opt/louwy/releases/20261002-youtube-proxy-recovery`, apontada por `/opt/louwy/current`.
 - Release anterior preservada para retorno: `/opt/louwy/releases/20260927-qa`.
 - Dados, modelos e ambiente: `/opt/louwy/shared`.
 - Serviço: `louwy.service`, usuário `louwy`, API em `127.0.0.1:5174`.
@@ -71,5 +71,26 @@ nginx -t
 df -h /
 ```
 
-A importação do YouTube depende das restrições do provedor. No teste do servidor,
-houve bloqueio que exige verificação pelo YouTube; os áudios já armazenados permanecem disponíveis.
+A importação usa `YTDLP_PROXY=socks5h://127.0.0.1:11881`. Em 02/10/2026,
+a porta estava sem listener e todas as tentativas recentes falhavam com
+`Connection refused`. A rota direta, inclusive IPv6, retornava desafio de robô.
+Foi recuperado um túnel privado com chave exclusiva e conta SSH `louwy-proxy`,
+sem shell e limitada ao encaminhamento remoto de `127.0.0.1:11881`.
+O proxy depende do Mac autorizado ligado e conectado. Consulte
+`deploy/YOUTUBE_PROXY.md` para operação e a pendência de instalação no login.
+
+O backend agora verifica o proxy antes de chamar o extrator e devolve
+`YOUTUBE_PROXY_UNAVAILABLE` nas APIs síncrona e assíncrona. O frontend mantém
+o fluxo atual, com fila, consulta de progresso e reconhecimento de duplicatas.
+
+Também foi reparada a dependência de detecção de tom: o `.pth` do ambiente
+apontava para `/opt/rubituci-ai/venv/lib/python3.12/site-packages`, que não existe
+mais. `numpy==2.2.6` e dependências faltantes do librosa foram instalados
+diretamente no ambiente do Louwy, sem atualizar o yt-dlp ou alterar outro app.
+As dependências de torch/transcrição desse antigo compartilhamento precisam
+de manutenção separada; a separação de instrumentos não foi validada nesta correção.
+
+Backup do banco, ambiente e caminho da release anterior:
+`/root/migration-louwy-20260927/youtube-recovery-20261002`.
+O retorno do código pode ser feito apontando `/opt/louwy/current` para o caminho
+salvo em `previous-release` e reiniciando apenas `louwy.service`.

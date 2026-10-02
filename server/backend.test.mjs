@@ -17,6 +17,7 @@ let directory;
 let child;
 let baseUrl;
 let output = "";
+let proxyServer;
 const cookies = {};
 
 async function eventually(check, timeout = 5000) {
@@ -47,7 +48,7 @@ before(async () => {
   await mkdir(join(directory, "data", "branding"), { recursive: true });
   await mkdir(join(directory, "data", "avatars"), { recursive: true });
   await symlink(resolve(source, "../node_modules"), join(directory, "node_modules"));
-  await Promise.all(["index.mjs", "auth.mjs", "church-context.mjs", "plans.mjs", "mercadopago.mjs"].map((name) => copyFile(join(source, name), join(directory, name))));
+  await Promise.all(["index.mjs", "auth.mjs", "church-context.mjs", "plans.mjs", "mercadopago.mjs", "youtube-proxy.mjs"].map((name) => copyFile(join(source, name), join(directory, name))));
   const passwordSalt = "regression-test-salt";
   const passwordHash = scryptSync("test-password", passwordSalt, 64).toString("base64");
   const members = ["master", "vocal", "outsider", "inactive", "replacement"].map((id, index) => ({
@@ -116,8 +117,11 @@ before(async () => {
   `);
   const lyricsBin = join(directory, "fake-lyrics.cjs");
   await writeFile(lyricsBin, `#!${process.execPath}\nconst fs = require('node:fs'); const path = require('node:path'); const id = path.basename(process.argv.at(-1), '.mp3'); const log = (event) => fs.appendFileSync(process.env.MEDIA_LOG, JSON.stringify({id,event})+'\\n'); log('start'); fs.writeFileSync(process.env.LYRICS_MARKER, 'started'); setTimeout(() => { log('end'); console.log(JSON.stringify({text:'one two three four five six seven eight',lines:[{text:'one two three four five six seven eight',time:0}],model:'test'})); }, id.startsWith('queue-') ? 30000 : id.startsWith('media-') ? 300 : 60);\n`, { mode: 0o755 });
+  proxyServer = http.createServer();
+  proxyServer.listen(0, "127.0.0.1");
+  await once(proxyServer, "listening");
   child = spawn(process.execPath, [join(directory, "index.mjs")], {
-    env: { ...process.env, PORT: "0", PYTHON_BIN: join(directory, "missing-python"), STEM_PYTHON_BIN: join(directory, "missing-stem-python"), SEPARATOR_BIN: join(directory, "missing-separator"), LYRICS_PYTHON_BIN: lyricsBin, LYRICS_MARKER: join(directory, "lyrics-started"), WORKSPACE_MARKER: join(directory, "workspace-started"), MEDIA_LOG: join(directory, "media-log"), TEST_CLOCK: join(directory, "test-clock") },
+    env: { ...process.env, PORT: "0", YTDLP_PROXY: `socks5h://127.0.0.1:${proxyServer.address().port}`, PYTHON_BIN: join(directory, "missing-python"), STEM_PYTHON_BIN: join(directory, "missing-stem-python"), SEPARATOR_BIN: join(directory, "missing-separator"), LYRICS_PYTHON_BIN: lyricsBin, LYRICS_MARKER: join(directory, "lyrics-started"), WORKSPACE_MARKER: join(directory, "workspace-started"), MEDIA_LOG: join(directory, "media-log"), TEST_CLOCK: join(directory, "test-clock") },
     stdio: ["ignore", "pipe", "pipe"]
   });
   child.stdout.on("data", (data) => { output += data; baseUrl ||= output.match(/http:\/\/127\.0\.0\.1:\d+/)?.[0]; });
@@ -131,6 +135,7 @@ before(async () => {
 });
 
 after(async () => {
+  if (proxyServer?.listening) await new Promise((resolve) => proxyServer.close(resolve));
   if (child && child.exitCode === null) {
     child.kill("SIGTERM");
     await once(child, "exit");
@@ -479,4 +484,23 @@ test("async imports cap active jobs and release capacity after failure", async (
   const retry = await api("/api/import", { method: "POST", body: { url: "https://youtu.be/Capa9999999", asynchronous: true } });
   assert.equal(retry.response.status, 202);
   await eventually(async () => (await api("/api/import-jobs/" + retry.data.jobId)).data.status === "error");
+});
+
+test("proxy outage fails promptly in both import APIs while existing songs remain usable", async () => {
+  await new Promise((resolve) => proxyServer.close(resolve));
+  const start = Date.now();
+  const synchronous = await api("/api/import", { method: "POST", body: { url: "https://youtu.be/ProxyDown01" } });
+  assert.equal(synchronous.response.status, 503);
+  assert.equal(synchronous.data.code, "YOUTUBE_PROXY_UNAVAILABLE");
+  const asynchronous = await api("/api/import", { method: "POST", body: { url: "https://youtu.be/ProxyDown02", asynchronous: true } });
+  assert.equal(asynchronous.response.status, 202);
+  const endpoint = "/api/import-jobs/" + asynchronous.data.jobId;
+  await eventually(async () => (await api(endpoint)).data.status === "error");
+  const failed = (await api(endpoint)).data;
+  assert.equal(failed.code, "YOUTUBE_PROXY_UNAVAILABLE");
+  assert.match(failed.error, /Mac.*ligado/);
+  assert.ok(Date.now() - start < 3000);
+  const existing = await api("/api/import", { method: "POST", body: { url: "https://youtu.be/AsyncKnown1", asynchronous: true } });
+  assert.equal(existing.response.status, 409);
+  assert.equal(existing.data.duplicate, true);
 });

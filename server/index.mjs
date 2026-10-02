@@ -7,6 +7,7 @@ import { basename, dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { createAuth, normalizePhone } from "./auth.mjs";
+import { checkYoutubeProxy, youtubeProxyError } from "./youtube-proxy.mjs";
 import {
   closeDatabase,
   createChurch,
@@ -2134,6 +2135,9 @@ function catalogVideo(catalog, videoId) {
 
 function importFailure(error) {
   const detail = String(error?.message || error);
+  if (error?.code === "YOUTUBE_PROXY_UNAVAILABLE" || (youtubeProxy && /Connection refused|ECONNREFUSED|Unable to connect to proxy|ProxyError/i.test(detail))) {
+    return { status: 503, code: "YOUTUBE_PROXY_UNAVAILABLE", error: youtubeProxyError().message };
+  }
   if (error?.status === 503) return { status: 503, code: "MEDIA_BUSY", error: detail };
   if (/sign in to confirm.*not a bot|confirm you.re not a bot|HTTP Error 429|Too Many Requests/i.test(detail)) {
     return {
@@ -2174,6 +2178,7 @@ async function performImport({ videoId, url }, update, addedBy, churchId) {
   const existing = catalogVideo(await readCatalog(churchId), videoId);
   if (existing) return { song: existing, duplicate: true };
   update("queued", "checking");
+  await checkYoutubeProxy(youtubeProxy);
   const raw = await run(python, youtubeDlpArgs(["--dump-single-json", url]), () => update("processing", "checking"));
   const meta = JSON.parse(raw);
   if (String(meta.id || "") !== videoId) throw new Error("Identificador de vídeo inválido.");

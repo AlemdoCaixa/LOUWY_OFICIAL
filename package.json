@@ -16,7 +16,7 @@
     "test:audio": "node --test server/test-audio-session.mjs",
     "test:import": "node --test server/test-import-song.mjs",
     "test:import-ui": "node server/test-import-ui.mjs",
-    "test": "node --test server/plans.test.mjs server/mercadopago.test.mjs server/backend.test.mjs",
+    "test": "node --test server/plans.test.mjs server/mercadopago.test.mjs server/backend.test.mjs server/youtube-proxy.test.mjs",
     "test:lyrics": "python3 -m unittest discover -s server -p test_transcribe_lyrics.py",
     "test:multi-church": "node --env-file=.env.local server/test-multi-church-local.mjs",
     "test:multi-church-ui": "node --env-file=.env.local server/test-multi-church-ui.mjs"
