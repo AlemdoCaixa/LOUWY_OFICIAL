@@ -43,9 +43,12 @@ const youtubeJsRuntime = process.env.YTDLP_JS_RUNTIME || "node:" + process.execP
 const youtubeCookiesFile = String(process.env.YTDLP_COOKIES_FILE || "").trim();
 const youtubeProxy = String(process.env.YTDLP_PROXY || "").trim();
 const youtubeRemoteComponents = String(process.env.YTDLP_REMOTE_COMPONENTS || "ejs:github").trim();
+const youtubeExtractorArgs = String(process.env.YTDLP_EXTRACTOR_ARGS || "").trim();
+const youtubePotProviderUrl = String(process.env.YTDLP_POT_PROVIDER_URL || "").trim();
 const detectKeyScript = join(base, "detect_key.py");
 const transcribeLyricsScript = join(base, "transcribe_lyrics.py");
 const dataDir = join(base, "data");
+const youtubeCacheDir = process.env.YTDLP_CACHE_DIR || join(dataDir, "yt-dlp-cache");
 const audioDir = join(dataDir, "audio");
 const stemsDir = join(dataDir, "stems");
 const eventFilesDir = join(dataDir, "event-files");
@@ -69,6 +72,7 @@ mkdirSync(eventFilesDir, { recursive: true });
 mkdirSync(brandingDir, { recursive: true });
 mkdirSync(avatarsDir, { recursive: true });
 mkdirSync(modelsDir, { recursive: true });
+mkdirSync(youtubeCacheDir, { recursive: true });
 
 const fallbackCatalog = existsSync(catalogPath)
   ? JSON.parse(readFileSync(catalogPath, "utf8"))
@@ -2103,10 +2107,12 @@ app.post("/api/detect-key/:songId", async (req, res) => {
 });
 
 function youtubeDlpArgs(extraArgs = []) {
-  const args = ["-m", "yt_dlp", "--js-runtimes", youtubeJsRuntime];
+  const args = ["-m", "yt_dlp", "--js-runtimes", youtubeJsRuntime, "--cache-dir", youtubeCacheDir];
   if (youtubeRemoteComponents) args.push("--remote-components", youtubeRemoteComponents);
   if (youtubeCookiesFile && existsSync(youtubeCookiesFile)) args.push("--cookies", youtubeCookiesFile);
   if (youtubeProxy) args.push("--proxy", youtubeProxy);
+  if (youtubeExtractorArgs) args.push("--extractor-args", youtubeExtractorArgs);
+  if (youtubePotProviderUrl) args.push("--extractor-args", "youtubepot-bgutilhttp:base_url=" + youtubePotProviderUrl);
   args.push("--no-playlist", ...extraArgs);
   return args;
 }
@@ -2179,6 +2185,7 @@ async function performImport({ videoId, url }, update, addedBy, churchId) {
   if (existing) return { song: existing, duplicate: true };
   update("queued", "checking");
   await checkYoutubeProxy(youtubeProxy);
+  await checkYoutubeProxy(youtubePotProviderUrl);
   const raw = await run(python, youtubeDlpArgs(["--dump-single-json", url]), () => update("processing", "checking"));
   const meta = JSON.parse(raw);
   if (String(meta.id || "") !== videoId) throw new Error("Identificador de vídeo inválido.");

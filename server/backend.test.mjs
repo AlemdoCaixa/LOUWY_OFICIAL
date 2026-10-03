@@ -18,6 +18,7 @@ let child;
 let baseUrl;
 let output = "";
 let proxyServer;
+let providerServer;
 const cookies = {};
 
 async function eventually(check, timeout = 5000) {
@@ -120,8 +121,11 @@ before(async () => {
   proxyServer = http.createServer();
   proxyServer.listen(0, "127.0.0.1");
   await once(proxyServer, "listening");
+  providerServer = http.createServer();
+  providerServer.listen(0, "127.0.0.1");
+  await once(providerServer, "listening");
   child = spawn(process.execPath, [join(directory, "index.mjs")], {
-    env: { ...process.env, PORT: "0", YTDLP_PROXY: `socks5h://127.0.0.1:${proxyServer.address().port}`, PYTHON_BIN: join(directory, "missing-python"), STEM_PYTHON_BIN: join(directory, "missing-stem-python"), SEPARATOR_BIN: join(directory, "missing-separator"), LYRICS_PYTHON_BIN: lyricsBin, LYRICS_MARKER: join(directory, "lyrics-started"), WORKSPACE_MARKER: join(directory, "workspace-started"), MEDIA_LOG: join(directory, "media-log"), TEST_CLOCK: join(directory, "test-clock") },
+    env: { ...process.env, PORT: "0", YTDLP_EXTRACTOR_ARGS: "youtube:player_client=mweb;fetch_pot=always", YTDLP_POT_PROVIDER_URL: `http://127.0.0.1:${providerServer.address().port}`, YTDLP_PROXY: `socks5h://127.0.0.1:${proxyServer.address().port}`, PYTHON_BIN: join(directory, "missing-python"), STEM_PYTHON_BIN: join(directory, "missing-stem-python"), SEPARATOR_BIN: join(directory, "missing-separator"), LYRICS_PYTHON_BIN: lyricsBin, LYRICS_MARKER: join(directory, "lyrics-started"), WORKSPACE_MARKER: join(directory, "workspace-started"), MEDIA_LOG: join(directory, "media-log"), TEST_CLOCK: join(directory, "test-clock") },
     stdio: ["ignore", "pipe", "pipe"]
   });
   child.stdout.on("data", (data) => { output += data; baseUrl ||= output.match(/http:\/\/127\.0\.0\.1:\d+/)?.[0]; });
@@ -135,6 +139,7 @@ before(async () => {
 });
 
 after(async () => {
+  if (providerServer?.listening) await new Promise((resolve) => providerServer.close(resolve));
   if (proxyServer?.listening) await new Promise((resolve) => proxyServer.close(resolve));
   if (child && child.exitCode === null) {
     child.kill("SIGTERM");
@@ -334,13 +339,13 @@ test("media queue is bounded and deleting queued or running songs cancels their 
   assert.equal((await api("/api/health")).response.status, 200);
 });
 
-test("YouTube imports enable Node for both stages and explain provider blocking", async () => {
+test("YouTube imports pass Node, writable cache and token configuration to both stages", async () => {
   const importer = join(directory, "missing-python");
   await writeFile(importer, `#!${process.execPath}\nprocess.stderr.write("Sign in to confirm you're not a bot");process.exit(1);\n`, { mode: 0o755 });
   const blocked = await api("/api/import", { method: "POST", body: { url: "https://www.youtube.com/watch?v=Fixture0001" } });
   assert.equal(blocked.response.status, 502);
   assert.match(blocked.data.error, /YouTube.*bloqueando/);
-  await writeFile(importer, `#!${process.execPath}\nconst fs=require('node:fs');const path=require('node:path');const args=process.argv; if(!args.includes('--no-playlist')||args[args.indexOf('--js-runtimes')+1]!=='node:'+process.execPath)process.exit(2);fs.appendFileSync(path.join(__dirname,'youtube-stages'),'checked\\n');if(args.includes('--dump-single-json'))console.log(JSON.stringify({id:'Fixture0001',title:'Imported test',duration:5}));else fs.writeFileSync(args[args.indexOf('-o')+1].replace('%(ext)s','mp3'),'audio');\n`, { mode: 0o755 });
+  await writeFile(importer, `#!${process.execPath}\nconst fs=require('node:fs');const path=require('node:path');const args=process.argv; if(!args.includes('--no-playlist')||args[args.indexOf('--js-runtimes')+1]!=='node:'+process.execPath||!args.includes('youtube:player_client=mweb;fetch_pot=always')||!args.some(a=>a.startsWith('youtubepot-bgutilhttp:base_url=http://127.0.0.1:'))||args[args.indexOf('--cache-dir')+1]!==path.join(__dirname,'data','yt-dlp-cache'))process.exit(2);fs.appendFileSync(path.join(__dirname,'youtube-stages'),'checked\\n');if(args.includes('--dump-single-json'))console.log(JSON.stringify({id:'Fixture0001',title:'Imported test',duration:5}));else fs.writeFileSync(args[args.indexOf('-o')+1].replace('%(ext)s','mp3'),'audio');\n`, { mode: 0o755 });
   const imported = await api("/api/import", { method: "POST", body: { url: "https://www.youtube.com/watch?v=Fixture0001" } });
   assert.equal(imported.response.status, 201);
   assert.equal(imported.data.id, "Fixture0001");
@@ -484,6 +489,20 @@ test("async imports cap active jobs and release capacity after failure", async (
   const retry = await api("/api/import", { method: "POST", body: { url: "https://youtu.be/Capa9999999", asynchronous: true } });
   assert.equal(retry.response.status, 202);
   await eventually(async () => (await api("/api/import-jobs/" + retry.data.jobId)).data.status === "error");
+});
+
+test("token provider outage fails promptly without running the downloader", async () => {
+  const port = providerServer.address().port;
+  await new Promise((resolve) => providerServer.close(resolve));
+  await writeFile(join(directory, "missing-python"), `#!${process.execPath}\nrequire('node:fs').writeFileSync(require('node:path').join(__dirname,'unexpected-provider-download'),'started');process.exit(1);\n`, { mode: 0o755 });
+  const row = await api("/api/import", { method: "POST", body: { url: "https://youtu.be/PotDown0001" } });
+  assert.equal(row.response.status, 503);
+  assert.equal(row.data.code, "YOUTUBE_PROXY_UNAVAILABLE");
+  await assert.rejects(access(join(directory, "unexpected-provider-download")));
+  const existing = await api("/api/import", { method: "POST", body: { url: "https://youtu.be/AsyncKnown1", asynchronous: true } });
+  assert.equal(existing.data.duplicate, true);
+  providerServer.listen(port, "127.0.0.1");
+  await once(providerServer, "listening");
 });
 
 test("proxy outage fails promptly in both import APIs while existing songs remain usable", async () => {
