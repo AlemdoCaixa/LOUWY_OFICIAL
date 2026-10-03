@@ -1,5 +1,6 @@
 services:
   youtube-egress:
+    profiles: [experimental-egress]
     image: louwy-youtube-egress:20261002-server
     build: .
     container_name: louwy-youtube-egress
