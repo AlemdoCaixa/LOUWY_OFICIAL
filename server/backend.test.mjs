@@ -341,11 +341,14 @@ test("media queue is bounded and deleting queued or running songs cancels their 
 
 test("YouTube imports pass Node, writable cache and token configuration to both stages", async () => {
   const importer = join(directory, "missing-python");
-  await writeFile(importer, `#!${process.execPath}\nprocess.stderr.write("Sign in to confirm you're not a bot");process.exit(1);\n`, { mode: 0o755 });
-  const blocked = await api("/api/import", { method: "POST", body: { url: "https://www.youtube.com/watch?v=Fixture0001" } });
-  assert.equal(blocked.response.status, 502);
-  assert.match(blocked.data.error, /YouTube.*bloqueando/);
-  await writeFile(importer, `#!${process.execPath}\nconst fs=require('node:fs');const path=require('node:path');const args=process.argv; if(!args.includes('--no-playlist')||args[args.indexOf('--js-runtimes')+1]!=='node:'+process.execPath||!args.includes('youtube:player_client=mweb;fetch_pot=always')||!args.some(a=>a.startsWith('youtubepot-bgutilhttp:base_url=http://127.0.0.1:'))||args[args.indexOf('--cache-dir')+1]!==path.join(__dirname,'data','yt-dlp-cache'))process.exit(2);fs.appendFileSync(path.join(__dirname,'youtube-stages'),'checked\\n');if(args.includes('--dump-single-json'))console.log(JSON.stringify({id:'Fixture0001',title:'Imported test',duration:5}));else fs.writeFileSync(args[args.indexOf('-o')+1].replace('%(ext)s','mp3'),'audio');\n`, { mode: 0o755 });
+  for (const message of ["Sign in to confirm you're not a bot", "ERROR: unable to download video data: HTTP Error 403: Forbidden"]) {
+    await writeFile(importer, `#!${process.execPath}\nprocess.stderr.write(${JSON.stringify(message)});process.exit(1);\n`, { mode: 0o755 });
+    const blocked = await api("/api/import", { method: "POST", body: { url: "https://www.youtube.com/watch?v=Fixture0001" } });
+    assert.equal(blocked.response.status, 502);
+    assert.equal(blocked.data.code, "YOUTUBE_BLOCKED");
+    assert.match(blocked.data.error, /YouTube.*bloqueando/);
+  }
+  await writeFile(importer, `#!${process.execPath}\nconst fs=require('node:fs');const path=require('node:path');const args=process.argv; if(!args.includes('--no-playlist')||args[args.indexOf('--js-runtimes')+1]!=='node:'+process.execPath||!args.includes('youtube:player_client=mweb;fetch_pot=always')||!args.some(a=>a.startsWith('youtubepot-bgutilhttp:base_url=http://127.0.0.1:'))||args[args.indexOf('--cache-dir')+1]!==path.join(__dirname,'data','yt-dlp-cache'))process.exit(2);if(args.includes('-x')&&args[args.indexOf('-f')+1]!=='bestaudio/best')process.exit(2);fs.appendFileSync(path.join(__dirname,'youtube-stages'),'checked\\n');if(args.includes('--dump-single-json'))console.log(JSON.stringify({id:'Fixture0001',title:'Imported test',duration:5}));else fs.writeFileSync(args[args.indexOf('-o')+1].replace('%(ext)s','mp3'),'audio');\n`, { mode: 0o755 });
   const imported = await api("/api/import", { method: "POST", body: { url: "https://www.youtube.com/watch?v=Fixture0001" } });
   assert.equal(imported.response.status, 201);
   assert.equal(imported.data.id, "Fixture0001");

@@ -44,6 +44,11 @@ parte das dependências de forma tardia.
 O YouTube usa Node.js por `YTDLP_JS_RUNTIME`, o componente de extração
 `YTDLP_REMOTE_COMPONENTS` e, quando configurados, `YTDLP_PROXY` e
 `YTDLP_COOKIES_FILE`. Os mesmos argumentos são usados para metadados e download.
+O plugin `bgutil-ytdlp-pot-provider==2.0.1` permite obter tokens do serviço
+configurado por `YTDLP_POT_PROVIDER_URL`. O plugin, por si só, não resolve
+bloqueios de IP. `YTDLP_EXTRACTOR_ARGS` seleciona os argumentos de extração,
+e `YTDLP_CACHE_DIR` permite escolher um cache gravável. Metadados, áudio e
+a repetição após reiniciar precisam passar antes de adotar uma nova rota.
 Uma queda do proxy deve ser reparada na conexão, sem desativar a configuração
 e enviar automaticamente as mesmas tentativas pelo IP bloqueado do servidor.
 

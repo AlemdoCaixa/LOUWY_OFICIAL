@@ -2145,7 +2145,7 @@ function importFailure(error) {
     return { status: 503, code: "YOUTUBE_PROXY_UNAVAILABLE", error: youtubeProxyError().message };
   }
   if (error?.status === 503) return { status: 503, code: "MEDIA_BUSY", error: detail };
-  if (/sign in to confirm.*not a bot|confirm you.re not a bot|HTTP Error 429|Too Many Requests/i.test(detail)) {
+  if (/sign in to confirm.*not a bot|confirm you.re not a bot|HTTP Error 429|Too Many Requests|unable to download video data: HTTP Error 403/i.test(detail)) {
     return {
       status: 502, code: "YOUTUBE_BLOCKED",
       error: "O YouTube está bloqueando importações deste servidor. Tente novamente mais tarde."
@@ -2193,6 +2193,7 @@ async function performImport({ videoId, url }, update, addedBy, churchId) {
   if (!existsSync(output)) {
     update("queued", "downloading");
     await run(python, youtubeDlpArgs([
+      "-f", "bestaudio/best",
       "-x", "--audio-format", "mp3", "--audio-quality", "192K",
       "-o", join(churchDirectory(audioDir, churchId), videoId + ".%(ext)s"), url
     ]), () => update("processing", "downloading"));

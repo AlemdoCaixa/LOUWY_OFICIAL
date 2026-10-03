@@ -10,7 +10,7 @@ Servidor: `root@77.42.46.50`.
 
 ## Louwy
 
-- Release ativa: `/opt/louwy/releases/20261002-youtube-proxy-recovery`, apontada por `/opt/louwy/current`.
+- Release ativa: `/opt/louwy/releases/20261002-youtube-server-tokens`, apontada por `/opt/louwy/current`.
 - Release anterior preservada para retorno: `/opt/louwy/releases/20260927-qa`.
 - Dados, modelos e ambiente: `/opt/louwy/shared`.
 - Serviço: `louwy.service`, usuário `louwy`, API em `127.0.0.1:5174`.
@@ -74,10 +74,11 @@ df -h /
 A importação utiliza um proxy definido em `YTDLP_PROXY`. Em 02/10/2026, essa
 conexão estava sem listener e todas as tentativas recentes falhavam com
 `Connection refused`. A rota direta, inclusive IPv6, retornava desafio de robô.
-Um túnel externo recuperou temporariamente a conexão, mas não atende ao
-requisito de execução independente no servidor. A substituição permanente
-depende de validar uma saída aceita pelo YouTube; a alternativa WARP voltou a
-retornar desafio de robô após reiniciar. Consulte `deploy/YOUTUBE_PROXY.md`.
+O túnel do computador pessoal foi desativado. O servidor foi preparado para
+um provedor de tokens e uma saída independente, mas a alternativa gratuita
+não passou na repetição do download: metadados responderam e o áudio retornou
+HTTP 403. A recuperação definitiva permanece pendente de uma saída validada.
+Consulte `deploy/YOUTUBE_PROXY.md`; o perfil gratuito é experimental.
 
 O backend verifica o proxy antes de chamar o extrator e devolve
 `YOUTUBE_PROXY_UNAVAILABLE` nas APIs síncrona e assíncrona. O frontend mantém
