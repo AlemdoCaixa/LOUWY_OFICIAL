@@ -1,5 +1,10 @@
 # Operação do proxy de importação do YouTube
 
+**Histórico:** o envio por link foi substituído por upload de MP3 a pedido do
+usuário. O endpoint de URL fica desativado por padrão. Consulte
+[MP3_UPLOAD.md](./MP3_UPLOAD.md) para o fluxo atual. Os testes de proxy abaixo
+descrevem a investigação anterior, não requisitos para upload de MP3.
+
 O frontend envia uma solicitação assíncrona, acompanha o progresso e recebe a música ou um erro do backend. O extrator utiliza a rota definida em `YTDLP_PROXY` para metadados e download. A indisponibilidade dessa rota deve ser reparada no proxy, sem remover sua configuração e enviar automaticamente as mesmas tentativas pelo IP bloqueado do host.
 
 O backend verifica a disponibilidade TCP do proxy antes de invocar o extrator. Uma porta fechada ou configuração inválida retorna `YOUTUBE_PROXY_UNAVAILABLE`; um erro posterior de conexão também é traduzido para essa categoria. Essa verificação não garante, sozinha, acesso ao YouTube. É necessário testar um vídeo público com as mesmas opções usadas pelo serviço.

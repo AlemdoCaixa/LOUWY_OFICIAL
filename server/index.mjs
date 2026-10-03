@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { createAuth, normalizePhone } from "./auth.mjs";
 import { checkYoutubeProxy, youtubeProxyError } from "./youtube-proxy.mjs";
+import { createMp3Upload, hashMp3, prepareMp3 } from "./mp3-upload.mjs";
 import {
   closeDatabase,
   createChurch,
@@ -50,6 +51,9 @@ const transcribeLyricsScript = join(base, "transcribe_lyrics.py");
 const dataDir = join(base, "data");
 const youtubeCacheDir = process.env.YTDLP_CACHE_DIR || join(dataDir, "yt-dlp-cache");
 const audioDir = join(dataDir, "audio");
+const mp3UploadDir = join(dataDir, "mp3-uploads");
+const uploadMp3 = createMp3Upload(mp3UploadDir);
+const youtubeImportEnabled = process.env.ENABLE_YOUTUBE_IMPORT === "true";
 const stemsDir = join(dataDir, "stems");
 const eventFilesDir = join(dataDir, "event-files");
 const brandingDir = join(dataDir, "branding");
@@ -289,7 +293,7 @@ app.use(async (req, res, next) => {
   if (!new Set(["POST", "PUT", "PATCH", "DELETE"]).has(req.method)) return next();
   // Media endpoints use the catalog mutation queue and their own job guards.
   // Waiting for a subprocess must not hold up account or workspace changes.
-  if (req.method === "POST" && /^\/api\/(?:import|(?:detect-key|lyrics|stems)\/[^/]+)\/?$/i.test(req.path)) return next();
+  if (req.method === "POST" && /^\/api\/(?:import|upload-song|(?:detect-key|lyrics|stems)\/[^/]+)\/?$/i.test(req.path)) return next();
   let release;
   const previous = writeQueue;
   writeQueue = new Promise((resolve) => { release = resolve; });
@@ -624,7 +628,7 @@ function startNextMedia() {
   });
 }
 
-function executeProcess(command, args, { signal, onOutput } = {}) {
+function executeProcess(command, args, { signal, onOutput, timeoutMs = MEDIA_TIMEOUT_MS } = {}) {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) return reject(new Error("Processamento cancelado."));
     const child = spawn(command, args, { env: process.env, signal });
@@ -634,7 +638,7 @@ function executeProcess(command, args, { signal, onOutput } = {}) {
     const timer = setTimeout(() => {
       failure = new Error("O processamento excedeu o tempo limite. Tente uma música mais curta.");
       child.kill("SIGKILL");
-    }, MEDIA_TIMEOUT_MS);
+    }, timeoutMs);
     timer.unref();
     child.stdout.on("data", (data) => {
       out += data.toString();
@@ -2141,6 +2145,7 @@ function catalogVideo(catalog, videoId) {
 
 function importFailure(error) {
   const detail = String(error?.message || error);
+  if (error?.code === "INVALID_MP3") return { status: 422, code: "INVALID_MP3", error: detail };
   if (error?.code === "YOUTUBE_PROXY_UNAVAILABLE" || (youtubeProxy && /Connection refused|ECONNREFUSED|Unable to connect to proxy|ProxyError/i.test(detail))) {
     return { status: 503, code: "YOUTUBE_PROXY_UNAVAILABLE", error: youtubeProxyError().message };
   }
@@ -2241,6 +2246,7 @@ function importOperation(video, addedBy, churchId) {
 }
 
 app.post("/api/import", async (req, res) => {
+  if (!youtubeImportEnabled) return res.status(410).json({ error: "O envio por link foi substituído pelo upload de MP3.", code: "YOUTUBE_IMPORT_DISABLED" });
   const video = normalizeYoutubeUrl(req.body?.url);
   if (!video) return res.status(400).json({ error: "Cole um link válido de um vídeo do YouTube." });
   pruneImportJobs();
@@ -2289,6 +2295,124 @@ app.post("/api/import", async (req, res) => {
     const failure = importFailure(error);
     return res.status(failure.status).json({ error: failure.error, code: failure.code });
   }
+});
+
+let receivingMp3 = 0;
+const receivingMp3Owners = new Set();
+
+app.post("/api/upload-song", (req, res) => {
+  const churchId = req.auth.churchId;
+  const ownerId = req.auth.memberId;
+  const receiverKey = `${churchId}:${ownerId}`;
+  if (receivingMp3 >= 4 || receivingMp3Owners.has(receiverKey) || activeImportJobs.size + receivingMp3 >= MAX_ACTIVE_IMPORTS || mediaQueue.length >= MAX_QUEUED_MEDIA) {
+    return res.status(503).json({ error: busyImportError().message, code: "MEDIA_BUSY" });
+  }
+  receivingMp3 += 1;
+  receivingMp3Owners.add(receiverKey);
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    receivingMp3 -= 1;
+    receivingMp3Owners.delete(receiverKey);
+  };
+  const cleanup = () => { if (req.mp3UploadPath) rmSync(req.mp3UploadPath, { force: true }); };
+  req.once("aborted", () => { release(); cleanup(); });
+  uploadMp3(req, res, async (uploadError) => {
+    try {
+      if (req.aborted) { cleanup(); return; }
+      if (uploadError) {
+        cleanup();
+        const tooLarge = uploadError.code === "LIMIT_FILE_SIZE";
+        return res.status(tooLarge ? 413 : 400).json({ error: tooLarge ? "O MP3 pode ter no máximo 50 MB." : uploadError.code === "INVALID_MP3" ? uploadError.message : "Envie um único arquivo MP3 e os dados da música." });
+      }
+      if (!req.file?.size) { cleanup(); return res.status(400).json({ error: "Selecione um arquivo MP3 com áudio." }); }
+      const hash = await hashMp3(req.file.path);
+      const songId = "mp3-" + hash;
+      const existing = (await readCatalog(churchId)).find((song) => song.id === songId);
+      if (existing) { cleanup(); return res.status(409).json({ error: "Esse MP3 já existe na biblioteca.", duplicate: true, song: existing }); }
+      if (req.aborted) { cleanup(); return; }
+      const operationKey = `${churchId}:${songId}`;
+      const ownerKey = `${churchId}:${ownerId}:${songId}`;
+      let operation = importOperations.get(operationKey);
+      if (operation) cleanup();
+      else {
+        if (importOperations.size >= MAX_ACTIVE_IMPORTS || mediaQueue.length >= MAX_QUEUED_MEDIA) throw busyImportError();
+        operation = { status: "queued", stage: "preparing", listeners: new Set(), promise: null };
+        const update = (status, stage) => {
+          operation.status = status; operation.stage = stage;
+          for (const listener of operation.listeners) listener(status, stage);
+        };
+        const input = req.file.path;
+        const title = String(req.body?.title || "").trim().slice(0, 160);
+        const artist = String(req.body?.artist || "").trim().slice(0, 160);
+        const filenameTitle = cleanOriginalName(req.file.originalname).replace(/\.mp3$/i, "").slice(0, 160);
+        const output = scopedFile(audioDir, songId + ".mp3", churchId);
+        operation.promise = Promise.resolve().then(async () => {
+          let committed = false;
+          try {
+            const metadata = await scheduleMedia(() => {
+              update("processing", "preparing");
+              return prepareMp3(input, output, executeProcess);
+            });
+            update("queued", "detecting-key");
+            let keyData = null;
+            try { keyData = await detectKey(output, () => update("processing", "detecting-key")); }
+            catch (error) { console.warn("Falha ao detectar tom do MP3:", error.message); }
+            const tags = metadata.tags;
+            const song = {
+              id: songId, title: title || String(tags.title || tags.TITLE || filenameTitle || "Sem título").slice(0, 160),
+              artist: artist || String(tags.artist || tags.ARTIST || "Artista não informado").slice(0, 160),
+              source: "upload", audioHash: hash, audioUrl: "/audio/" + songId + ".mp3",
+              originalKey: keyData?.key || "C", keyMode: keyData?.mode || "major",
+              keyConfidence: Number(keyData?.confidence || 0), keySource: keyData ? "detected" : "manual",
+              duration: metadata.duration, cover: "", addedBy: ownerId, uses: 0
+            };
+            const result = await mutateCatalog((catalog) => {
+              const duplicate = catalog.find((entry) => entry.id === songId);
+              if (duplicate) return { song: duplicate, duplicate: true };
+              catalog.unshift(song); return { song, duplicate: false };
+            }, churchId);
+            committed = true;
+            return result;
+          } finally {
+            rmSync(input, { force: true });
+            if (!committed) rmSync(output, { force: true });
+          }
+        }).finally(() => {
+          if (importOperations.get(operationKey) === operation) importOperations.delete(operationKey);
+        });
+        importOperations.set(operationKey, operation);
+      }
+      pruneImportJobs();
+      const current = importJobs.get(activeImportJobs.get(ownerKey));
+      if (current) return res.status(202).json(publicImportJob(current));
+      const job = { jobId: randomUUID(), ownerId, churchId, status: operation.status, stage: operation.stage, finishedAt: 0 };
+      importJobs.set(job.jobId, job);
+      activeImportJobs.set(ownerKey, job.jobId);
+      const progress = (status, stage) => { job.status = status; job.stage = stage; };
+      operation.listeners.add(progress);
+      void operation.promise.then((result) => {
+        job.status = "ready"; job.song = result.song; job.duplicate = result.duplicate;
+      }, (error) => {
+        console.warn("Falha ao importar MP3:", error.message);
+        const failure = importFailure(error);
+        job.status = "error";
+        job.error = failure.code === "IMPORT_FAILED" ? "Não foi possível preparar o MP3. Tente novamente." : failure.error;
+        job.code = failure.code;
+      }).finally(() => {
+        operation.listeners.delete(progress);
+        job.finishedAt = Date.now();
+        if (activeImportJobs.get(ownerKey) === job.jobId) activeImportJobs.delete(ownerKey);
+        pruneImportJobs();
+      });
+      return res.status(202).json({ jobId: job.jobId, status: job.status });
+    } catch (error) {
+      cleanup();
+      const failure = error.status === 503 ? importFailure(error) : { status: 500, code: "UPLOAD_FAILED", error: "Não foi possível receber o MP3. Tente novamente." };
+      return res.status(failure.status).json({ error: failure.error, code: failure.code });
+    } finally { release(); }
+  });
 });
 
 app.get("/api/import-jobs/:jobId", (req, res) => {

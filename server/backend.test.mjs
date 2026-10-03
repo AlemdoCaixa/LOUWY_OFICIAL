@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdtemp, mkdir, copyFile, writeFile, readFile, rm, symlink, access } from "node:fs/promises";
+import { mkdtemp, mkdir, copyFile, writeFile, readFile, rm, symlink, access, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -49,7 +49,7 @@ before(async () => {
   await mkdir(join(directory, "data", "branding"), { recursive: true });
   await mkdir(join(directory, "data", "avatars"), { recursive: true });
   await symlink(resolve(source, "../node_modules"), join(directory, "node_modules"));
-  await Promise.all(["index.mjs", "auth.mjs", "church-context.mjs", "plans.mjs", "mercadopago.mjs", "youtube-proxy.mjs"].map((name) => copyFile(join(source, name), join(directory, name))));
+  await Promise.all(["index.mjs", "auth.mjs", "church-context.mjs", "plans.mjs", "mercadopago.mjs", "youtube-proxy.mjs", "mp3-upload.mjs"].map((name) => copyFile(join(source, name), join(directory, name))));
   const passwordSalt = "regression-test-salt";
   const passwordHash = scryptSync("test-password", passwordSalt, 64).toString("base64");
   const members = ["master", "vocal", "outsider", "inactive", "replacement"].map((id, index) => ({
@@ -125,7 +125,7 @@ before(async () => {
   providerServer.listen(0, "127.0.0.1");
   await once(providerServer, "listening");
   child = spawn(process.execPath, [join(directory, "index.mjs")], {
-    env: { ...process.env, PORT: "0", YTDLP_EXTRACTOR_ARGS: "youtube:player_client=mweb;fetch_pot=always", YTDLP_POT_PROVIDER_URL: `http://127.0.0.1:${providerServer.address().port}`, YTDLP_PROXY: `socks5h://127.0.0.1:${proxyServer.address().port}`, PYTHON_BIN: join(directory, "missing-python"), STEM_PYTHON_BIN: join(directory, "missing-stem-python"), SEPARATOR_BIN: join(directory, "missing-separator"), LYRICS_PYTHON_BIN: lyricsBin, LYRICS_MARKER: join(directory, "lyrics-started"), WORKSPACE_MARKER: join(directory, "workspace-started"), MEDIA_LOG: join(directory, "media-log"), TEST_CLOCK: join(directory, "test-clock") },
+    env: { ...process.env, PORT: "0", ENABLE_YOUTUBE_IMPORT: "true", YTDLP_EXTRACTOR_ARGS: "youtube:player_client=mweb;fetch_pot=always", YTDLP_POT_PROVIDER_URL: `http://127.0.0.1:${providerServer.address().port}`, YTDLP_PROXY: `socks5h://127.0.0.1:${proxyServer.address().port}`, PYTHON_BIN: join(directory, "missing-python"), STEM_PYTHON_BIN: join(directory, "missing-stem-python"), SEPARATOR_BIN: join(directory, "missing-separator"), LYRICS_PYTHON_BIN: lyricsBin, LYRICS_MARKER: join(directory, "lyrics-started"), WORKSPACE_MARKER: join(directory, "workspace-started"), MEDIA_LOG: join(directory, "media-log"), TEST_CLOCK: join(directory, "test-clock") },
     stdio: ["ignore", "pipe", "pipe"]
   });
   child.stdout.on("data", (data) => { output += data; baseUrl ||= output.match(/http:\/\/127\.0\.0\.1:\d+/)?.[0]; });
@@ -525,4 +525,52 @@ test("proxy outage fails promptly in both import APIs while existing songs remai
   const existing = await api("/api/import", { method: "POST", body: { url: "https://youtu.be/AsyncKnown1", asynchronous: true } });
   assert.equal(existing.response.status, 409);
   assert.equal(existing.data.duplicate, true);
+});
+
+test("real MP3 upload validates bytes, deduplicates, isolates jobs and cleans failed uploads without a YouTube proxy", { skip: !process.env.MP3_TEST_FIXTURE }, async () => {
+  const fixture = await readFile(process.env.MP3_TEST_FIXTURE);
+  const submit = async (bytes, name = 'song.mp3', user = 'master', fields = {}) => {
+    const form = new FormData();
+    form.append('audio', new Blob([bytes], {type:'text/html'}), name);
+    form.append('title', fields.title || 'Música de teste');
+    form.append('artist', fields.artist || 'QA');
+    const response = await fetch(baseUrl + '/api/upload-song', {method:'POST',headers: cookies[user] ? {Cookie:cookies[user]} : {},body:form});
+    return {response,data:await response.json()};
+  };
+  assert.equal((await submit(fixture,'song.mp3',null)).response.status,401);
+  assert.equal((await submit(fixture,'song.wav')).response.status,400);
+  const empty = await submit(new Uint8Array());
+  assert.equal(empty.response.status,400);
+  const oversized = await submit(new Uint8Array(50*1024*1024+1));
+  assert.equal(oversized.response.status,413);
+  for (const bytes of [Buffer.from('<html>renamed as MP3</html>'), await readFile(process.env.MP3_TEST_WAV)]) {
+    const invalid = await submit(bytes);
+    assert.equal(invalid.response.status,202);
+    const endpoint='/api/import-jobs/'+invalid.data.jobId;
+    await eventually(async()=> (await api(endpoint)).data.status==='error');
+    assert.equal((await api(endpoint)).data.code,'INVALID_MP3');
+  }
+  const [first,second]=await Promise.all([submit(fixture),submit(fixture,'renamed.MP3','vocal')]);
+  assert.equal(first.response.status,202);
+  assert.equal(second.response.status,202);
+  const endpoint='/api/import-jobs/'+first.data.jobId;
+  assert.equal((await api(endpoint,{user:'vocal'})).response.status,404);
+  await eventually(async()=> (await api(endpoint)).data.status==='ready',10000);
+  const song=(await api(endpoint)).data.song;
+  assert.equal(song.source,'upload');
+  assert.equal(song.title,'Música de teste');
+  assert.ok(song.duration>0);
+  const other='/api/import-jobs/'+second.data.jobId;
+  await eventually(async()=> (await api(other,{user:'vocal'})).data.status==='ready');
+  assert.equal((await api(other,{user:'vocal'})).data.song.id,song.id);
+  const duplicate=await submit(fixture,'different-name.mp3');
+  assert.equal(duplicate.response.status,409);
+  assert.equal(duplicate.data.song.id,song.id);
+  assert.equal((await api('/api/catalog')).data.filter(row=>row.id===song.id).length,1);
+  const audio=await fetch(baseUrl+song.audioUrl,{headers:{Cookie:cookies.master,Range:'bytes=0-1023'}});
+  assert.equal(audio.status,206);
+  assert.match(audio.headers.get('content-type'),/audio/);
+  assert.equal((await audio.arrayBuffer()).byteLength,1024);
+  assert.deepEqual(await readdir(join(directory,'data','mp3-uploads')),[]);
+  assert.equal((await api('/api/catalog/'+song.id,{method:'DELETE'})).response.status,200);
 });

@@ -16,7 +16,7 @@ type ImportOptions = {
 type ImportResponse = {
   jobId?: string;
   status?: "queued" | "processing" | "ready" | "error";
-  stage?: "checking" | "downloading" | "detecting-key";
+  stage?: "checking" | "downloading" | "preparing" | "detecting-key";
   song?: Song;
   duplicate?: boolean;
   error?: string;
@@ -111,7 +111,7 @@ async function requestJson(path: string, init: RequestInit, options: ImportOptio
 function responseError(status: number, data: ImportResponse): ImportRequestError {
   if (status === 401) return new ImportRequestError("Sua sessão expirou. Entre novamente.", status);
   if (status === 403) return new ImportRequestError("Sua conta não pode acessar esta importação.", status);
-  if (status === 404) return new ImportRequestError("Esta importação expirou ou o servidor foi reiniciado. Confira o catálogo e envie o link novamente.", status);
+  if (status === 404) return new ImportRequestError("Esta importação expirou ou o servidor foi reiniciado. Confira o catálogo e envie a música novamente.", status);
   return new ImportRequestError(typeof data.error === "string" ? data.error : "Não foi possível concluir a importação. Tente novamente.", status);
 }
 
@@ -126,6 +126,27 @@ export async function importSong(url: string, actorId: string, options: ImportOp
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ url: url.trim(), actorId, asynchronous: true })
   }, options);
+  return followImport(initial, options, report);
+}
+
+export async function uploadSong(file: File, metadata: { title: string; artist: string }, options: ImportOptions): Promise<ImportResult> {
+  const report = (progress: ImportProgress) => {
+    checkCancellation(options.signal);
+    options.onProgress?.(progress);
+  };
+  if (!/\.mp3$/i.test(file.name)) throw new ImportRequestError("Selecione um arquivo MP3.");
+  if (!file.size) throw new ImportRequestError("O arquivo está vazio. Selecione outro MP3.");
+  if (file.size > 50 * 1024 * 1024) throw new ImportRequestError("O MP3 pode ter no máximo 50 MB.");
+  const body = new FormData();
+  body.append("audio", file);
+  body.append("title", metadata.title.trim());
+  body.append("artist", metadata.artist.trim());
+  report({ status: "submitting", message: "Enviando MP3… Aguarde o envio terminar antes de fechar." });
+  const initial = await requestJson("/api/upload-song", { method: "POST", body }, { ...options, requestTimeoutMs: options.requestTimeoutMs ?? 10 * 60 * 1000 });
+  return followImport(initial, options, report);
+}
+
+async function followImport(initial: Awaited<ReturnType<typeof requestJson>>, options: ImportOptions, report: (progress: ImportProgress) => void): Promise<ImportResult> {
   if (initial.response.status === 409 && initial.data.duplicate && isSong(initial.data.song)) return { song: initial.data.song, duplicate: true };
   if (!initial.response.ok) throw responseError(initial.response.status, initial.data);
   if (initial.response.status !== 202 && isSong(initial.data)) return { song: initial.data, duplicate: false };
@@ -160,6 +181,7 @@ export async function importSong(url: string, actorId: string, options: ImportOp
     const stageMessages = {
       checking: "Verificando o vídeo…",
       downloading: "Baixando e preparando o áudio…",
+      preparing: "Verificando e preparando o MP3…",
       "detecting-key": "Identificando o tom da música…"
     };
     report({ status: job.status, message: job.status === "queued" ? "Na fila de processamento…" : (job.stage && stageMessages[job.stage]) || "Preparando a música…" });

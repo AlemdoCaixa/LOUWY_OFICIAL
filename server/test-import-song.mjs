@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { importSong, importErrorMessage } from '../src/importSong.ts';
+import { importSong, uploadSong, importErrorMessage } from '../src/importSong.ts';
 
 const song={id:'video-qa',title:'Música QA',artist:'Artista QA',originalKey:'C',duration:120,audioUrl:'/audio/video-qa.mp3'};
 const json=(value,status=200)=>new Response(JSON.stringify(value),{status,headers:{'Content-Type':'application/json'}});
@@ -111,4 +111,39 @@ test('auth and expired jobs fail immediately without reconnect loops',async()=>{
     await assert.rejects(importSong('url','actor',options(async()=>++calls===1?json({jobId:'job'},202):new Response('<html>Unavailable</html>',{status}))),status===401?/sessão expirou/:status===403?/não pode acessar/:/expirou ou o servidor foi reiniciado/);
     assert.equal(calls,2);
   }
+});
+
+test('MP3 upload sends multipart bytes once and follows preparation progress',async()=>{
+  const file=new File(['MP3 fixture'],'Música.mp3',{type:'audio/mpeg'});
+  const requests=[],progress=[];
+  const replies=[json({jobId:'upload-job'},202),json({status:'processing',stage:'preparing'}),json({status:'ready',song:{...song,source:'upload'}})];
+  const result=await uploadSong(file,{title:' Música ',artist:' Artista '},options(async(path,init)=>{requests.push({path,init});return replies.shift();},{onProgress:entry=>progress.push(entry)}));
+  assert.equal(result.song.source,'upload');
+  assert.equal(requests[0].path,'/api/upload-song');
+  assert.equal(requests[0].init.headers,undefined);
+  assert.equal(requests[0].init.body.get('title'),'Música');
+  assert.equal(requests[0].init.body.get('artist'),'Artista');
+  assert.equal(await requests[0].init.body.get('audio').text(),'MP3 fixture');
+  assert.equal(requests.filter(({init})=>init.method==='POST').length,1);
+  assert.ok(progress.some(({message})=>message.includes('Verificando e preparando o MP3')));
+});
+
+test('MP3 duplicate returns existing song without polling or retransmitting',async()=>{
+  let calls=0;
+  const result=await uploadSong(new File(['audio'],'copy.mp3'),{title:'Copy',artist:''},options(async()=>{calls++;return json({duplicate:true,song},409);}));
+  assert.deepEqual(result,{song,duplicate:true});assert.equal(calls,1);
+});
+
+test('invalid, empty and oversized uploads fail before any request',async()=>{
+  let calls=0;
+  for(const [file,message] of [[new File(['x'],'video.mp4'),/Selecione um arquivo MP3/],[new File([],'empty.mp3'),/arquivo está vazio/],[{name:'large.mp3',size:50*1024*1024+1},/50 MB/]]){
+    await assert.rejects(uploadSong(file,{title:'',artist:''},options(async()=>{calls++;})),message);
+  }
+  assert.equal(calls,0);
+});
+
+test('upload network failure never repeats a potentially completed POST',async()=>{
+  let calls=0;
+  await assert.rejects(uploadSong(new File(['audio'],'song.mp3'),{title:'',artist:''},options(async()=>{calls++;throw new TypeError('Load failed');})),/Confira o catálogo/);
+  assert.equal(calls,1);
 });

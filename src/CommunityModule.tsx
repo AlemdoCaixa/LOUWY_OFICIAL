@@ -4,7 +4,8 @@ import {
 } from "lucide-react";
 import "./CommunityModule.css";
 import { responseData } from "./api";
-import { importErrorMessage, importSong, isImportCancelled } from "./importSong";
+import { importErrorMessage, uploadSong, isImportCancelled } from "./importSong";
+import Mp3UploadFields from "./Mp3UploadFields";
 import type { Playlist, Song, UserProfile } from "./types";
 
 type Props = {
@@ -199,7 +200,6 @@ export default function CommunityModule({
         })}
       </div>
       {importOpen && <ImportSongModal
-        actorId={currentUserId}
         onClose={() => setImportOpen(false)}
         onImported={async (song, signal) => { await onCatalogRefresh(); if(signal.aborted)return; setImportOpen(false); onOpenStudio(song); }}
         onDuplicate={(song, signal) => { if(signal.aborted)return; setImportOpen(false); onOpenStudio(song); }}
@@ -250,7 +250,6 @@ export default function CommunityModule({
       </div>
       {folderOpen && <NameModal title="Nova pasta" placeholder="Ex.: Culto de domingo" onClose={() => setFolderOpen(false)} onSave={async (name) => { await createFolder(name); setFolderOpen(false); }}/>}
       {importOpen && <ImportSongModal
-        actorId={currentUserId}
         onClose={() => setImportOpen(false)}
         onImported={async (song, signal) => { await onCatalogRefresh(); if(signal.aborted)return; await addToLibrary(song); if(signal.aborted)return; setImportOpen(false); onOpenStudio(song); }}
         onDuplicate={async (song, signal) => { await addToLibrary(song); if(signal.aborted)return; setImportOpen(false); onOpenStudio(song); }}
@@ -303,12 +302,14 @@ export default function CommunityModule({
   </>;
 }
 
-function ImportSongModal({actorId,onClose,onImported,onDuplicate}:{
-  actorId:string; onClose:()=>void;
+function ImportSongModal({onClose,onImported,onDuplicate}:{
+  onClose:()=>void;
   onImported:(song:Song,signal:AbortSignal)=>Promise<void>|void;
   onDuplicate:(song:Song,signal:AbortSignal)=>Promise<void>|void;
 }) {
-  const [url,setUrl]=useState("");
+  const [file,setFile]=useState<File|null>(null);
+  const [title,setTitle]=useState("");
+  const [artist,setArtist]=useState("");
   const [loading,setLoading]=useState(false);
   const [progress,setProgress]=useState("");
   const [importStarted,setImportStarted]=useState(false);
@@ -342,13 +343,13 @@ function ImportSongModal({actorId,onClose,onImported,onDuplicate}:{
   }
 
   async function submit(){
-    if(!url.trim()||completedSong)return;
+    if(!file||completedSong)return;
     const controller=begin();if(!controller)return;
     setDuplicate(null);
     try{
-      const result=await importSong(url,actorId,{signal:controller.signal,onProgress:({status,message})=>{setProgress(message);if(status!=="submitting")setImportStarted(true);}});
+      const result=await uploadSong(file,{title,artist},{signal:controller.signal,onProgress:({status,message})=>{setProgress(message);if(status!=="submitting")setImportStarted(true);}});
       if(controller.signal.aborted)return;
-      if(result.duplicate){setDuplicate(result.song);setError("Essa versão da música já existe na plataforma.");return;}
+      if(result.duplicate){setDuplicate(result.song);setError("Esse MP3 já existe na biblioteca.");return;}
       setCompletedSong(result.song);
       await openImported(result.song,controller);
     }catch(issue){if(!controller.signal.aborted&&!isImportCancelled(issue))setError(importErrorMessage(issue));}
@@ -371,16 +372,16 @@ function ImportSongModal({actorId,onClose,onImported,onDuplicate}:{
   }
 
   return <div className="modal-backdrop" onMouseDown={close}><div className="modal" onMouseDown={(event)=>event.stopPropagation()}>
-    <div className="modal-title"><div><div className="eyebrow">Catálogo global</div><h2>Enviar música</h2></div><button className="icon-btn" onClick={close} aria-label="Fechar importação"><X size={17}/></button></div>
-    <div className="notice">Antes de baixar, o sistema verifica o vídeo. Se essa versão já existir, nenhuma cópia é criada.</div>
-    <label className="field"><span>LINK DO YOUTUBE</span><input autoFocus value={url} disabled={loading||Boolean(completedSong)} onChange={(event)=>{setUrl(event.target.value);setDuplicate(null);setError("");}} placeholder="https://youtube.com/watch?v=..."/></label>
+    <div className="modal-title"><div><div className="eyebrow">Biblioteca</div><h2>Enviar música</h2></div><button className="icon-btn" onClick={close} aria-label="Fechar importação"><X size={17}/></button></div>
+    <div className="notice">Selecione o MP3 da música. O sistema prepara o áudio e identifica o tom. Arquivos idênticos não criam cópias na biblioteca.</div>
+    <Mp3UploadFields file={file} title={title} artist={artist} disabled={loading||Boolean(completedSong)} onFile={(value)=>{setFile(value);setDuplicate(null);}} onTitle={setTitle} onArtist={setArtist} onError={setError}/>
     {progress&&<div className="notice" role="status" style={{marginTop:12}}>{progress}{importStarted&&<p>Você pode fechar esta janela. Depois, atualize o catálogo para conferir a música.</p>}</div>}
     {error&&<div className={"notice "+(duplicate?"":"error")} role="alert" style={{marginTop:12}}>{error}</div>}
     {duplicate&&<button className="duplicate-link" disabled={loading} onClick={()=>void openDuplicate()}>
       {duplicate.cover?<img src={duplicate.cover}/>:<div className="dup-cover"><Music2 size={17}/></div>}
       <div><strong>{duplicate.title}</strong><span>{duplicate.artist}</span><small>Abrir música existente →</small></div>
     </button>}
-    <div className="actions">{completedSong?<button className="primary" disabled={loading} onClick={()=>void retryOpen()}>{loading?"Atualizando…":"Abrir música importada"}</button>:<button className="primary" disabled={loading||!url.trim()} onClick={()=>void submit()}>{loading?"Importando…":"Enviar música"}</button>}<button className="ghost" onClick={close}>Fechar</button></div>
+    <div className="actions">{completedSong?<button className="primary" disabled={loading} onClick={()=>void retryOpen()}>{loading?"Atualizando…":"Abrir música importada"}</button>:<button className="primary" disabled={loading||!file} onClick={()=>void submit()}>{loading?"Importando…":"Enviar música"}</button>}<button className="ghost" onClick={close}>Fechar</button></div>
   </div></div>;
 }
 

@@ -8,7 +8,8 @@ import {
 } from "lucide-react";
 import "./TeamModule.css";
 import { responseData } from "./api";
-import { importErrorMessage, importSong, isImportCancelled } from "./importSong";
+import { importErrorMessage, uploadSong, isImportCancelled } from "./importSong";
+import Mp3UploadFields from "./Mp3UploadFields";
 import type {
   EventAttachment, EventModule, EventModuleKind, EventSong, Member, MinistryEvent, Song, Team, UserProfile, Workspace
 } from "./types";
@@ -508,7 +509,9 @@ function SongModal({event,item,actorId,isMaster,workspace,catalog,onClose,onSave
   const defaultMinister=isMaster?(item?.ministerId||vocalParticipants[0]?.id||actorId):actorId;
   const [ministerId,setMinisterId]=useState(defaultMinister);
   const [songId,setSongId]=useState(item?.songId||catalog[0]?.id||"");
-  const [youtube,setYoutube]=useState("");
+  const [file,setFile]=useState<File|null>(null);
+  const [title,setTitle]=useState("");
+  const [artist,setArtist]=useState("");
   const selected=catalog.find((song)=>song.id===songId);
   const [key,setKey]=useState(item?.key||selected?.originalKey||"C");
   const [description,setDescription]=useState(item?.description||"");
@@ -536,11 +539,11 @@ function SongModal({event,item,actorId,isMaster,workspace,catalog,onClose,onSave
     try{
       if(!saved){
         let finalSong=importedSong||catalog.find((song)=>song.id===songId);
-        if(!item&&youtube.trim()&&!importedSong){
-          const result=await importSong(youtube,actorId,{signal,onProgress:({status,message})=>{setProgress(message);if(status!=="submitting")setImportStarted(true);}});
+        if(!item&&file&&!importedSong){
+          const result=await uploadSong(file,{title,artist},{signal,onProgress:({status,message})=>{setProgress(message);if(status!=="submitting")setImportStarted(true);}});
           if(signal.aborted)return;
-          if(result.duplicate){setDuplicate(result.song);setError("Essa versão da música já existe na plataforma.");return;}
-          finalSong=result.song;imported=true;setImportedSong(result.song);setSongId(result.song.id);
+          if(result.duplicate){setDuplicate(result.song);setError("Esse MP3 já existe na biblioteca.");return;}
+          finalSong=result.song;imported=true;setImportedSong(result.song);setSongId(result.song.id);if(!key)setKey(result.song.originalKey);
         }
         if(!finalSong)throw new Error("Escolha uma música.");
         if(signal.aborted)return;
@@ -573,11 +576,11 @@ function SongModal({event,item,actorId,isMaster,workspace,catalog,onClose,onSave
 
   return <ModalShell eyebrow="Plano de ministração" title={item?"Editar minha música":"Enviar minha música"} onClose={close}>
     {isMaster&&<label className="field"><span>MINISTRANTE / VOZ PRINCIPAL</span><select disabled={saving} value={ministerId} onChange={(e)=>setMinisterId(e.target.value)}>{vocalParticipants.map((member)=><option key={member.id} value={member.id}>{member.name}</option>)}</select></label>}
-    {!item&&<><label className="field"><span>MÚSICA DA BIBLIOTECA</span><select disabled={saving} value={songId} onChange={(e)=>{setSongId(e.target.value);setYoutube("");setImportedSong(null);setDuplicate(null);const song=catalog.find((entry)=>entry.id===e.target.value);if(song)setKey(song.originalKey);}}><option value="">Selecione...</option>{importedSong&&!catalog.some((song)=>song.id===importedSong.id)&&<option value={importedSong.id}>{importedSong.title} · {importedSong.artist}</option>}{catalog.map((song)=><option key={song.id} value={song.id}>{song.title} · {song.artist}</option>)}</select></label><div className="or-divider">ou</div><label className="field"><span>LINK DO YOUTUBE</span><input disabled={saving} value={youtube} onChange={(e)=>{setYoutube(e.target.value);setImportedSong(null);setDuplicate(null);}} placeholder="https://youtube.com/watch?v=..."/></label></>}
-    <div className="form-grid two"><label className="field"><span>TOM OFICIAL · MEIO EM MEIO TOM</span><select disabled={saving} value={key} onChange={(e)=>setKey(e.target.value)}>{KEYS.map((value)=><option key={value}>{value}</option>)}</select></label><label className="field"><span>DESCRIÇÃO</span><input disabled={saving} value={description} onChange={(e)=>setDescription(e.target.value)} placeholder="Ex.: começar somente voz e piano"/></label><label className="field span-2"><span>ORIENTAÇÕES</span><textarea disabled={saving} rows={3} value={message} onChange={(e)=>setMessage(e.target.value)} placeholder="Entradas, dinâmica, final, referências..."/></label></div>
+    {!item&&<><label className="field"><span>MÚSICA DA BIBLIOTECA</span><select disabled={saving} value={songId} onChange={(e)=>{setSongId(e.target.value);setFile(null);setImportedSong(null);setDuplicate(null);const song=catalog.find((entry)=>entry.id===e.target.value);if(song)setKey(song.originalKey);}}><option value="">Selecione...</option>{importedSong&&!catalog.some((song)=>song.id===importedSong.id)&&<option value={importedSong.id}>{importedSong.title} · {importedSong.artist}</option>}{catalog.map((song)=><option key={song.id} value={song.id}>{song.title} · {song.artist}</option>)}</select></label><div className="or-divider">ou envie um MP3</div><Mp3UploadFields file={file} title={title} artist={artist} disabled={saving||Boolean(importedSong)} onFile={(value)=>{setFile(value);setSongId("");setKey("");setImportedSong(null);setDuplicate(null);}} onTitle={setTitle} onArtist={setArtist} onError={setError}/></>}
+    <div className="form-grid two"><label className="field"><span>TOM OFICIAL · MEIO EM MEIO TOM</span><select disabled={saving} value={key} onChange={(e)=>setKey(e.target.value)}>{file&&!importedSong&&<option value="">Detectar no MP3</option>}{KEYS.map((value)=><option key={value}>{value}</option>)}</select></label><label className="field"><span>DESCRIÇÃO</span><input disabled={saving} value={description} onChange={(e)=>setDescription(e.target.value)} placeholder="Ex.: começar somente voz e piano"/></label><label className="field span-2"><span>ORIENTAÇÕES</span><textarea disabled={saving} rows={3} value={message} onChange={(e)=>setMessage(e.target.value)} placeholder="Entradas, dinâmica, final, referências..."/></label></div>
     {progress&&<div className="notice" role="status">{progress}{importStarted&&<p>Você pode fechar esta janela. Depois, atualize o catálogo para conferir a música e adicioná-la ao evento.</p>}</div>}
-    {duplicate&&<button className="duplicate-link" disabled={saving} onClick={()=>{setImportedSong(duplicate);setSongId(duplicate.id);setKey(duplicate.originalKey);setYoutube("");setDuplicate(null);setError("");}}>{duplicate.cover?<img src={duplicate.cover}/>:<div className="dup-cover"><Music2 size={17}/></div>}<div><strong>{duplicate.title}</strong><span>{duplicate.artist}</span><small>Usar a faixa existente →</small></div></button>}
-    {error&&<div className="notice error" role="alert">{error}</div>}<div className="actions"><button className="primary" disabled={saving||(!item&&!songId&&!youtube.trim())} onClick={()=>void save()}>{saving?"Salvando...":item?"Salvar música":"Enviar música"}</button></div>
+    {duplicate&&<button className="duplicate-link" disabled={saving} onClick={()=>{setImportedSong(duplicate);setSongId(duplicate.id);setKey(duplicate.originalKey);setFile(null);setDuplicate(null);setError("");}}>{duplicate.cover?<img src={duplicate.cover}/>:<div className="dup-cover"><Music2 size={17}/></div>}<div><strong>{duplicate.title}</strong><span>{duplicate.artist}</span><small>Usar a faixa existente →</small></div></button>}
+    {error&&<div className="notice error" role="alert">{error}</div>}<div className="actions"><button className="primary" disabled={saving||(!item&&!songId&&!file)} onClick={()=>void save()}>{saving?"Salvando...":item?"Salvar música":"Enviar música"}</button></div>
   </ModalShell>;
 }
 
