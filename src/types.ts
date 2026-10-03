@@ -18,7 +18,7 @@ export type Song = {
   cover?: string;
   youtubeUrl?: string;
   audioUrl?: string;
-  source?: "youtube" | "demo";
+  source?: "youtube" | "upload" | "demo";
   uses?: number;
 };
 

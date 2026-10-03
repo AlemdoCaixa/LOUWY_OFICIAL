@@ -340,7 +340,7 @@ export default function Studio({
   }
 
   async function prepareStems(){
-    if(!song||song.id.startsWith("demo-")){setStemError("Importe uma faixa do YouTube antes de separar os instrumentos.");return;}
+    if(!song||song.id.startsWith("demo-")){setStemError("Envie um MP3 antes de separar os instrumentos.");return;}
     setStemStatus("processing");setStemProgress(0);setStemError("");
     try{
       const response=await fetch("/api/stems/"+song.id,{method:"POST"});
@@ -496,10 +496,10 @@ export default function Studio({
       <section className="player-card">
         <div className="now">
           {song.cover?<img className="big-cover" src={song.cover}/>:<div className="big-cover"><Music2 size={30}/></div>}
-          <div><div className="eyebrow">{song.source==="youtube"?"YouTube importado":"Biblioteca"}</div><h2 style={{margin:"3px 0 5px"}}>{song.title}</h2><div className="muted">{song.artist}</div>
+          <div><div className="eyebrow">{song.source==="upload"?"MP3 enviado":song.source==="youtube"?"YouTube importado":"Biblioteca"}</div><h2 style={{margin:"3px 0 5px"}}>{song.title}</h2><div className="muted">{song.artist}</div>
             <div className="song-meta-row">{isMaster?<label className="key-edit">Tom original <select className="notranslate" translate="no" value={song.originalKey} onChange={(event)=>void updateGlobalKey(event.target.value)}>{KEYS.map((key)=><option key={key} value={key}>{key}</option>)}</select></label>:<span className="detect-badge notranslate" translate="no">Original {song.originalKey}</span>}
               {song.keySource==="detected"&&<span className="detect-badge">Detectado {song.keyConfidence||0}%</span>}
-              {isMaster&&song.source==="youtube"&&<button className="mini-link" disabled={detectingKey} onClick={()=>void redetectKey()}>{detectingKey?"Analisando...":"Detectar novamente"}</button>}
+              {isMaster&&(song.source==="youtube"||song.source==="upload")&&<button className="mini-link" disabled={detectingKey} onClick={()=>void redetectKey()}>{detectingKey?"Analisando...":"Detectar novamente"}</button>}
               {sourceMode!=="original"&&<span className="source-badge">Ouvindo {STEM_LABELS[sourceMode]||sourceMode}</span>}
             </div>
           </div>

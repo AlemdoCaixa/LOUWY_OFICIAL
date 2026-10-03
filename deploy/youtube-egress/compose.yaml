@@ -1,0 +1,43 @@
+services:
+  youtube-egress:
+    profiles: [experimental-egress]
+    image: louwy-youtube-egress:20261002-server
+    build: .
+    container_name: louwy-youtube-egress
+    restart: unless-stopped
+    cap_add: [NET_ADMIN]
+    devices: [/dev/net/tun:/dev/net/tun]
+    cpus: 1.0
+    mem_limit: 512m
+    ports: ["127.0.0.1:11882:40001"]
+    volumes: ["registration:/var/lib/cloudflare-warp"]
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "2"}
+    healthcheck:
+      test: ["CMD-SHELL", "warp-cli --accept-tos status | grep -q 'Status update: Connected'"]
+      interval: 30s
+      timeout: 8s
+      retries: 3
+      start_period: 90s
+  token-provider:
+    image: brainicism/bgutil-ytdlp-pot-provider:2.0.1@sha256:96d95372bbf04db68e29329ba05a20bd406844fa3c5ac43315fe476870c6084d
+    container_name: louwy-youtube-pot
+    network_mode: host
+    command: ["--host", "127.0.0.1"]
+    init: true
+    restart: unless-stopped
+    cpus: 1.0
+    mem_limit: 512m
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "2"}
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:4416/ping',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 8s
+      retries: 3
+      start_period: 30s
+volumes:
+  registration:
+    name: louwy-youtube-egress

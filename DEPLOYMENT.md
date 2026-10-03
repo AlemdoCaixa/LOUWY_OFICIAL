@@ -10,7 +10,7 @@ Servidor: `root@77.42.46.50`.
 
 ## Louwy
 
-- Release ativa: `/opt/louwy/releases/20260927T202401Z-multichurch`, apontada por `/opt/louwy/current`.
+- Release ativa: `/opt/louwy/releases/20261002-youtube-server-tokens`, apontada por `/opt/louwy/current`.
 - Release anterior preservada para retorno: `/opt/louwy/releases/20260927-qa`.
 - Dados, modelos e ambiente: `/opt/louwy/shared`.
 - Serviço: `louwy.service`, usuário `louwy`, API em `127.0.0.1:5174`.
@@ -71,5 +71,24 @@ nginx -t
 df -h /
 ```
 
-A importação do YouTube depende das restrições do provedor. No teste do servidor,
-houve bloqueio que exige verificação pelo YouTube; os áudios já armazenados permanecem disponíveis.
+A importação utiliza um proxy definido em `YTDLP_PROXY`. Em 02/10/2026, essa
+conexão estava sem listener e todas as tentativas recentes falhavam com
+`Connection refused`. A rota direta, inclusive IPv6, retornava desafio de robô.
+O túnel do computador pessoal foi desativado. O servidor foi preparado para
+um provedor de tokens e uma saída independente, mas a alternativa gratuita
+não passou na repetição do download: metadados responderam e o áudio retornou
+HTTP 403. A recuperação definitiva permanece pendente de uma saída validada.
+Consulte `deploy/YOUTUBE_PROXY.md`; o perfil gratuito é experimental.
+
+O backend verifica o proxy antes de chamar o extrator e devolve
+`YOUTUBE_PROXY_UNAVAILABLE` nas APIs síncrona e assíncrona. O frontend mantém
+o fluxo atual de fila, progresso e reconhecimento de duplicatas.
+
+A detecção de tom também foi reparada: o ambiente externo referenciado por
+um `.pth` deixou de existir. NumPy e dependências faltantes do librosa foram
+instalados no próprio ambiente do Louwy. As dependências de separação e
+transcrição desse antigo compartilhamento precisam de manutenção separada;
+a separação de instrumentos não foi validada nesta correção.
+
+O banco, ambiente e caminho da release anterior foram preservados. Os caminhos
+privados e o procedimento de retorno foram entregues no relatório local.

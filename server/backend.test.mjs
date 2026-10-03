@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdtemp, mkdir, copyFile, writeFile, readFile, rm, symlink, access } from "node:fs/promises";
+import { mkdtemp, mkdir, copyFile, writeFile, readFile, rm, symlink, access, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,6 +17,8 @@ let directory;
 let child;
 let baseUrl;
 let output = "";
+let proxyServer;
+let providerServer;
 const cookies = {};
 
 async function eventually(check, timeout = 5000) {
@@ -47,7 +49,7 @@ before(async () => {
   await mkdir(join(directory, "data", "branding"), { recursive: true });
   await mkdir(join(directory, "data", "avatars"), { recursive: true });
   await symlink(resolve(source, "../node_modules"), join(directory, "node_modules"));
-  await Promise.all(["index.mjs", "auth.mjs", "church-context.mjs", "plans.mjs", "mercadopago.mjs"].map((name) => copyFile(join(source, name), join(directory, name))));
+  await Promise.all(["index.mjs", "auth.mjs", "church-context.mjs", "plans.mjs", "mercadopago.mjs", "youtube-proxy.mjs", "mp3-upload.mjs"].map((name) => copyFile(join(source, name), join(directory, name))));
   const passwordSalt = "regression-test-salt";
   const passwordHash = scryptSync("test-password", passwordSalt, 64).toString("base64");
   const members = ["master", "vocal", "outsider", "inactive", "replacement"].map((id, index) => ({
@@ -69,7 +71,7 @@ before(async () => {
     branding: { organizationName: "Test", logoStoredName: "old-logo.png", logoUrl: "/tenant-branding/old-logo.png" },
     members, events: [event, { ...event, id: "event-b", title: "Other event", participants: [{ memberId: "outsider" }], songs: [] }], teams: [], profiles: {}
   }));
-  const songIds = ["AsyncKnown1", "queue-async", "queue-capacity", "song-a", "media-lyrics", "media-stems", "media-key", "queue-blocker", "dedup-lyrics", "dedup-stems", "dedup-key", "key-delete", ...Array.from({ length: 22 }, (_, index) => "queue-" + index)];
+  const songIds = ["publish-stems", "AsyncKnown1", "queue-async", "queue-capacity", "song-a", "media-lyrics", "media-stems", "media-key", "queue-blocker", "dedup-lyrics", "dedup-stems", "dedup-key", "key-delete", ...Array.from({ length: 22 }, (_, index) => "queue-" + index)];
   await writeFile(join(directory, "data", "catalog.json"), JSON.stringify(songIds.map((id) => ({ id, title: "Original title", originalKey: "C" }))));
   await Promise.all(songIds.map((id) => writeFile(join(directory, "data", "audio", id + ".mp3"), "fixture audio")));
   await writeFile(join(directory, "data", "branding", "old-logo.png"), "old logo");
@@ -108,6 +110,7 @@ before(async () => {
       if (key === 'workspace' && (value.branding.organizationName === 'FAIL_SAVE' || value.members.some(m => m.name === 'FAIL_SAVE'))) throw new Error('simulated database failure');
       if (key === 'workspace' && value.teams.some(team => team.name === 'abort-first') && !(churchStates.get(k)?.teams||[]).some(team => team.name === 'abort-first')) { await writeFile(process.env.WORKSPACE_MARKER,'started'); await delay(200); }
       if (key === 'catalog' && value.some(song => song.title === 'Concurrent catalog title')) await delay(150);
+      if (key === 'catalog' && value.some(song => song.id === 'publish-stems' && song.stems)) await delay(300);
       churchStates.set(k,snapshot); return {version:1};
     }
     export async function createChurch({slug,name,workspace,catalog=[]}) { const normalized=normalizeChurchSlug(slug); if([...churches.values()].some(c=>c.slug===normalized)){const error=new Error('taken');error.code='CHURCH_SLUG_TAKEN';throw error;} const church={id:randomUUID(),slug:normalized,name,active:true};churches.set(church.id,church);churchStates.set(churchKey(church.id,'workspace'),structuredClone(workspace));churchStates.set(churchKey(church.id,'catalog'),structuredClone(catalog));return structuredClone(church); }
@@ -116,8 +119,14 @@ before(async () => {
   `);
   const lyricsBin = join(directory, "fake-lyrics.cjs");
   await writeFile(lyricsBin, `#!${process.execPath}\nconst fs = require('node:fs'); const path = require('node:path'); const id = path.basename(process.argv.at(-1), '.mp3'); const log = (event) => fs.appendFileSync(process.env.MEDIA_LOG, JSON.stringify({id,event})+'\\n'); log('start'); fs.writeFileSync(process.env.LYRICS_MARKER, 'started'); setTimeout(() => { log('end'); console.log(JSON.stringify({text:'one two three four five six seven eight',lines:[{text:'one two three four five six seven eight',time:0}],model:'test'})); }, id.startsWith('queue-') ? 30000 : id.startsWith('media-') ? 300 : 60);\n`, { mode: 0o755 });
+  proxyServer = http.createServer();
+  proxyServer.listen(0, "127.0.0.1");
+  await once(proxyServer, "listening");
+  providerServer = http.createServer();
+  providerServer.listen(0, "127.0.0.1");
+  await once(providerServer, "listening");
   child = spawn(process.execPath, [join(directory, "index.mjs")], {
-    env: { ...process.env, PORT: "0", PYTHON_BIN: join(directory, "missing-python"), STEM_PYTHON_BIN: join(directory, "missing-stem-python"), SEPARATOR_BIN: join(directory, "missing-separator"), LYRICS_PYTHON_BIN: lyricsBin, LYRICS_MARKER: join(directory, "lyrics-started"), WORKSPACE_MARKER: join(directory, "workspace-started"), MEDIA_LOG: join(directory, "media-log"), TEST_CLOCK: join(directory, "test-clock") },
+    env: { ...process.env, PORT: "0", ENABLE_YOUTUBE_IMPORT: "true", YTDLP_EXTRACTOR_ARGS: "youtube:player_client=mweb;fetch_pot=always", YTDLP_POT_PROVIDER_URL: `http://127.0.0.1:${providerServer.address().port}`, YTDLP_PROXY: `socks5h://127.0.0.1:${proxyServer.address().port}`, PYTHON_BIN: join(directory, "missing-python"), STEM_PYTHON_BIN: join(directory, "missing-stem-python"), SEPARATOR_BIN: join(directory, "missing-separator"), LYRICS_PYTHON_BIN: lyricsBin, LYRICS_MARKER: join(directory, "lyrics-started"), WORKSPACE_MARKER: join(directory, "workspace-started"), MEDIA_LOG: join(directory, "media-log"), TEST_CLOCK: join(directory, "test-clock") },
     stdio: ["ignore", "pipe", "pipe"]
   });
   child.stdout.on("data", (data) => { output += data; baseUrl ||= output.match(/http:\/\/127\.0\.0\.1:\d+/)?.[0]; });
@@ -131,6 +140,8 @@ before(async () => {
 });
 
 after(async () => {
+  if (providerServer?.listening) await new Promise((resolve) => providerServer.close(resolve));
+  if (proxyServer?.listening) await new Promise((resolve) => proxyServer.close(resolve));
   if (child && child.exitCode === null) {
     child.kill("SIGTERM");
     await once(child, "exit");
@@ -329,13 +340,16 @@ test("media queue is bounded and deleting queued or running songs cancels their 
   assert.equal((await api("/api/health")).response.status, 200);
 });
 
-test("YouTube imports enable Node for both stages and explain provider blocking", async () => {
+test("YouTube imports pass Node, writable cache and token configuration to both stages", async () => {
   const importer = join(directory, "missing-python");
-  await writeFile(importer, `#!${process.execPath}\nprocess.stderr.write("Sign in to confirm you're not a bot");process.exit(1);\n`, { mode: 0o755 });
-  const blocked = await api("/api/import", { method: "POST", body: { url: "https://www.youtube.com/watch?v=Fixture0001" } });
-  assert.equal(blocked.response.status, 502);
-  assert.match(blocked.data.error, /YouTube.*bloqueando/);
-  await writeFile(importer, `#!${process.execPath}\nconst fs=require('node:fs');const path=require('node:path');const args=process.argv; if(!args.includes('--no-playlist')||args[args.indexOf('--js-runtimes')+1]!=='node:'+process.execPath)process.exit(2);fs.appendFileSync(path.join(__dirname,'youtube-stages'),'checked\\n');if(args.includes('--dump-single-json'))console.log(JSON.stringify({id:'Fixture0001',title:'Imported test',duration:5}));else fs.writeFileSync(args[args.indexOf('-o')+1].replace('%(ext)s','mp3'),'audio');\n`, { mode: 0o755 });
+  for (const message of ["Sign in to confirm you're not a bot", "ERROR: unable to download video data: HTTP Error 403: Forbidden"]) {
+    await writeFile(importer, `#!${process.execPath}\nprocess.stderr.write(${JSON.stringify(message)});process.exit(1);\n`, { mode: 0o755 });
+    const blocked = await api("/api/import", { method: "POST", body: { url: "https://www.youtube.com/watch?v=Fixture0001" } });
+    assert.equal(blocked.response.status, 502);
+    assert.equal(blocked.data.code, "YOUTUBE_BLOCKED");
+    assert.match(blocked.data.error, /YouTube.*bloqueando/);
+  }
+  await writeFile(importer, `#!${process.execPath}\nconst fs=require('node:fs');const path=require('node:path');const args=process.argv; if(!args.includes('--no-playlist')||args[args.indexOf('--js-runtimes')+1]!=='node:'+process.execPath||!args.includes('youtube:player_client=mweb;fetch_pot=always')||!args.some(a=>a.startsWith('youtubepot-bgutilhttp:base_url=http://127.0.0.1:'))||args[args.indexOf('--cache-dir')+1]!==path.join(__dirname,'data','yt-dlp-cache'))process.exit(2);if(args.includes('-x')&&args[args.indexOf('-f')+1]!=='bestaudio/best')process.exit(2);fs.appendFileSync(path.join(__dirname,'youtube-stages'),'checked\\n');if(args.includes('--dump-single-json'))console.log(JSON.stringify({id:'Fixture0001',title:'Imported test',duration:5}));else fs.writeFileSync(args[args.indexOf('-o')+1].replace('%(ext)s','mp3'),'audio');\n`, { mode: 0o755 });
   const imported = await api("/api/import", { method: "POST", body: { url: "https://www.youtube.com/watch?v=Fixture0001" } });
   assert.equal(imported.response.status, 201);
   assert.equal(imported.data.id, "Fixture0001");
@@ -479,4 +493,98 @@ test("async imports cap active jobs and release capacity after failure", async (
   const retry = await api("/api/import", { method: "POST", body: { url: "https://youtu.be/Capa9999999", asynchronous: true } });
   assert.equal(retry.response.status, 202);
   await eventually(async () => (await api("/api/import-jobs/" + retry.data.jobId)).data.status === "error");
+});
+
+test("token provider outage fails promptly without running the downloader", async () => {
+  const port = providerServer.address().port;
+  await new Promise((resolve) => providerServer.close(resolve));
+  await writeFile(join(directory, "missing-python"), `#!${process.execPath}\nrequire('node:fs').writeFileSync(require('node:path').join(__dirname,'unexpected-provider-download'),'started');process.exit(1);\n`, { mode: 0o755 });
+  const row = await api("/api/import", { method: "POST", body: { url: "https://youtu.be/PotDown0001" } });
+  assert.equal(row.response.status, 503);
+  assert.equal(row.data.code, "YOUTUBE_PROXY_UNAVAILABLE");
+  await assert.rejects(access(join(directory, "unexpected-provider-download")));
+  const existing = await api("/api/import", { method: "POST", body: { url: "https://youtu.be/AsyncKnown1", asynchronous: true } });
+  assert.equal(existing.data.duplicate, true);
+  providerServer.listen(port, "127.0.0.1");
+  await once(providerServer, "listening");
+});
+
+test("proxy outage fails promptly in both import APIs while existing songs remain usable", async () => {
+  await new Promise((resolve) => proxyServer.close(resolve));
+  const start = Date.now();
+  const synchronous = await api("/api/import", { method: "POST", body: { url: "https://youtu.be/ProxyDown01" } });
+  assert.equal(synchronous.response.status, 503);
+  assert.equal(synchronous.data.code, "YOUTUBE_PROXY_UNAVAILABLE");
+  const asynchronous = await api("/api/import", { method: "POST", body: { url: "https://youtu.be/ProxyDown02", asynchronous: true } });
+  assert.equal(asynchronous.response.status, 202);
+  const endpoint = "/api/import-jobs/" + asynchronous.data.jobId;
+  await eventually(async () => (await api(endpoint)).data.status === "error");
+  const failed = (await api(endpoint)).data;
+  assert.equal(failed.code, "YOUTUBE_PROXY_UNAVAILABLE");
+  assert.match(failed.error, /serviço de importação.*indisponível/);
+  assert.ok(Date.now() - start < 3000);
+  const existing = await api("/api/import", { method: "POST", body: { url: "https://youtu.be/AsyncKnown1", asynchronous: true } });
+  assert.equal(existing.response.status, 409);
+  assert.equal(existing.data.duplicate, true);
+});
+
+test("real MP3 upload validates bytes, deduplicates, isolates jobs and cleans failed uploads without a YouTube proxy", { skip: !process.env.MP3_TEST_FIXTURE }, async () => {
+  const fixture = await readFile(process.env.MP3_TEST_FIXTURE);
+  const submit = async (bytes, name = 'song.mp3', user = 'master', fields = {}) => {
+    const form = new FormData();
+    form.append('audio', new Blob([bytes], {type:'text/html'}), name);
+    form.append('title', fields.title || 'Música de teste');
+    form.append('artist', fields.artist || 'QA');
+    const response = await fetch(baseUrl + '/api/upload-song', {method:'POST',headers: cookies[user] ? {Cookie:cookies[user]} : {},body:form});
+    return {response,data:await response.json()};
+  };
+  assert.equal((await submit(fixture,'song.mp3',null)).response.status,401);
+  assert.equal((await submit(fixture,'song.wav')).response.status,400);
+  const empty = await submit(new Uint8Array());
+  assert.equal(empty.response.status,400);
+  const oversized = await submit(new Uint8Array(20*1024*1024+1));
+  assert.equal(oversized.response.status,413);
+  for (const bytes of [Buffer.from('<html>renamed as MP3</html>'), await readFile(process.env.MP3_TEST_WAV)]) {
+    const invalid = await submit(bytes);
+    assert.equal(invalid.response.status,202);
+    const endpoint='/api/import-jobs/'+invalid.data.jobId;
+    await eventually(async()=> (await api(endpoint)).data.status==='error');
+    assert.equal((await api(endpoint)).data.code,'INVALID_MP3');
+  }
+  const [first,second]=await Promise.all([submit(fixture),submit(fixture,'renamed.MP3','vocal')]);
+  assert.equal(first.response.status,202);
+  assert.equal(second.response.status,202);
+  const endpoint='/api/import-jobs/'+first.data.jobId;
+  assert.equal((await api(endpoint,{user:'vocal'})).response.status,404);
+  await eventually(async()=> (await api(endpoint)).data.status==='ready',10000);
+  const song=(await api(endpoint)).data.song;
+  assert.equal(song.source,'upload');
+  assert.equal(song.title,'Música de teste');
+  assert.ok(song.duration>0);
+  const other='/api/import-jobs/'+second.data.jobId;
+  await eventually(async()=> (await api(other,{user:'vocal'})).data.status==='ready');
+  assert.equal((await api(other,{user:'vocal'})).data.song.id,song.id);
+  const duplicate=await submit(fixture,'different-name.mp3');
+  assert.equal(duplicate.response.status,409);
+  assert.equal(duplicate.data.song.id,song.id);
+  assert.equal((await api('/api/catalog')).data.filter(row=>row.id===song.id).length,1);
+  const audio=await fetch(baseUrl+song.audioUrl,{headers:{Cookie:cookies.master,Range:'bytes=0-1023'}});
+  assert.equal(audio.status,206);
+  assert.match(audio.headers.get('content-type'),/audio/);
+  assert.equal((await audio.arrayBuffer()).byteLength,1024);
+  assert.deepEqual(await readdir(join(directory,'data','mp3-uploads')),[]);
+  assert.equal((await api('/api/catalog/'+song.id,{method:'DELETE'})).response.status,200);
+});
+
+test("stems become ready only after the catalog authorizes their download", async () => {
+  const started=await api('/api/stems/publish-stems',{method:'POST'});
+  assert.equal(started.response.status,202);
+  await eventually(async()=>{try{await access(join(directory,'data','stems','test-church','publish-stems','test_(Vocals)_stem.mp3'));return true;}catch{return false;}});
+  assert.equal((await api('/api/stems/publish-stems')).data.status,'processing');
+  await eventually(async()=> (await api('/api/stems/publish-stems')).data.status==='ready');
+  const stems=(await api('/api/stems/publish-stems')).data.stems;
+  const response=await fetch(baseUrl+stems.vocals,{headers:{Cookie:cookies.master}});
+  assert.equal(response.status,200);
+  assert.equal(await response.text(),'test');
+  await api('/api/catalog/publish-stems',{method:'DELETE'});
 });

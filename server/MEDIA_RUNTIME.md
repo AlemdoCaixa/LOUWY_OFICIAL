@@ -32,6 +32,26 @@ A separação usa `htdemucs_6s.yaml`, com modelos em `server/models`. Preserve o
 
 Em uma máquina com pouco disco, use `--no-cache-dir`, compartilhe o PyTorch compatível existente e mantenha uma margem para novos áudios. Não instale três ambientes separados com as mesmas bibliotecas.
 
+As dependências de importação e detecção de tom em `requirements-media.txt`
+devem existir no próprio ambiente do Louwy. Em 02/10/2026, a remoção do ambiente
+referenciado por um `.pth` externo deixou `numpy` e dependências transitivas
+indisponíveis. Para reparar somente essas etapas, execute a instalação de
+`requirements-media.txt` no `PYTHON_BIN` do serviço e verifique os imports de
+`numpy`, `librosa` e `yt_dlp` como usuário `louwy`, além de um teste real de áudio.
+Evite considerar apenas `import librosa` como validação: esse pacote importa
+parte das dependências de forma tardia.
+
+O YouTube usa Node.js por `YTDLP_JS_RUNTIME`, o componente de extração
+`YTDLP_REMOTE_COMPONENTS` e, quando configurados, `YTDLP_PROXY` e
+`YTDLP_COOKIES_FILE`. Os mesmos argumentos são usados para metadados e download.
+O plugin `bgutil-ytdlp-pot-provider==2.0.1` permite obter tokens do serviço
+configurado por `YTDLP_POT_PROVIDER_URL`. O plugin, por si só, não resolve
+bloqueios de IP. `YTDLP_EXTRACTOR_ARGS` seleciona os argumentos de extração,
+e `YTDLP_CACHE_DIR` permite escolher um cache gravável. Metadados, áudio e
+a repetição após reiniciar precisam passar antes de adotar uma nova rota.
+Uma queda do proxy deve ser reparada na conexão, sem desativar a configuração
+e enviar automaticamente as mesmas tentativas pelo IP bloqueado do servidor.
+
 ## macOS com Apple Silicon
 
 A transcrição continua usando `mlx-whisper` e `mlx-community/whisper-large-v3-turbo-q4` por padrão. As dependências estão em `requirements-lyrics-macos.txt`. `LYRICS_BACKEND=mlx` força esse backend; `LYRICS_BACKEND=faster-whisper` força a versão de CPU.
