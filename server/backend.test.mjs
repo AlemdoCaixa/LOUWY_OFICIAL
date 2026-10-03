@@ -498,7 +498,7 @@ test("proxy outage fails promptly in both import APIs while existing songs remai
   await eventually(async () => (await api(endpoint)).data.status === "error");
   const failed = (await api(endpoint)).data;
   assert.equal(failed.code, "YOUTUBE_PROXY_UNAVAILABLE");
-  assert.match(failed.error, /Mac.*ligado/);
+  assert.match(failed.error, /serviço de importação.*indisponível/);
   assert.ok(Date.now() - start < 3000);
   const existing = await api("/api/import", { method: "POST", body: { url: "https://youtu.be/AsyncKnown1", asynchronous: true } });
   assert.equal(existing.response.status, 409);

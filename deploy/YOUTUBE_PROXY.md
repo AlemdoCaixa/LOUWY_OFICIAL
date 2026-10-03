@@ -4,11 +4,11 @@ O frontend envia uma solicitação assíncrona, acompanha o progresso e recebe a
 
 O backend verifica a disponibilidade TCP do proxy antes de invocar o extrator. Uma porta fechada ou configuração inválida retorna `YOUTUBE_PROXY_UNAVAILABLE`; um erro posterior de conexão também é traduzido para essa categoria. Essa verificação não garante, sozinha, acesso ao YouTube. É necessário testar um vídeo público com as mesmas opções usadas pelo serviço.
 
-Um túnel mantido por uma máquina externa deve ter uma chave exclusiva, verificação da chave do servidor, conta sem shell e encaminhamento limitado ao endereço e à porta necessários. O endereço de escuta deve ser privado. Use keepalives, supervisão e reconexão após falhas de rede.
+A solução definitiva deve operar com supervisão e reinício automático no servidor. A saída de internet usada pelo extrator precisa passar por testes reais de metadados e download: um proxy acessível, sozinho, não resolve um bloqueio do YouTube.
 
-O uso de um Mac como saída exige que ele esteja acordado e conectado. Para iniciar após login, instale um agente com `RunAtLoad`, `KeepAlive` e intervalo de reinício. O supervisor da sessão atual não substitui o agente de login. Não mantenha dois supervisores concorrendo pela mesma porta.
+Em 02/10/2026, o túnel por uma máquina externa recuperou duas importações reais apenas temporariamente. Ele não atende ao requisito de independência do computador pessoal e não deve ser tratado como solução definitiva. O acesso direto do servidor e a alternativa Cloudflare WARP retornaram a verificação de robô do YouTube. Uma consulta por WireGuard respondeu, mas o teste após reiniciar voltou a ser bloqueado, inclusive em IPv4 e com outro cliente de extração. Essa alternativa não foi aprovada para produção. A configuração definitiva depende de uma rota aceita pelo provedor, ainda não validada.
 
-Em 02/10/2026, a conexão foi recuperada com autorização do responsável. A instalação do agente de login ficou pendente por restrições das ferramentas locais. Os detalhes privados, instalador e instruções de ativação foram entregues ao responsável em relatório local; nenhuma chave privada deve ser publicada no Git.
+Ao configurar um serviço de proxy, mantenha credenciais no ambiente privado do servidor, fora do Git e dos logs. Restrinja a escuta local, limite recursos, configure reinício automático e valide o fluxo completo antes de substituir a rota em produção. Não instale um agente no computador pessoal para atender a esse requisito.
 
 ## Verificação
 

@@ -1,7 +1,7 @@
 import { createConnection } from "node:net";
 
 export function youtubeProxyError() {
-  return Object.assign(new Error("A conexão de importação do YouTube está indisponível. Confira se o Mac do proxy está ligado e conectado à internet e tente novamente."), {
+  return Object.assign(new Error("O serviço de importação do YouTube está temporariamente indisponível. Tente novamente em alguns minutos."), {
     status: 503,
     code: "YOUTUBE_PROXY_UNAVAILABLE",
   });

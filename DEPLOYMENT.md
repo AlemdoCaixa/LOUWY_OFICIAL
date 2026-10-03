@@ -74,9 +74,10 @@ df -h /
 A importação utiliza um proxy definido em `YTDLP_PROXY`. Em 02/10/2026, essa
 conexão estava sem listener e todas as tentativas recentes falhavam com
 `Connection refused`. A rota direta, inclusive IPv6, retornava desafio de robô.
-A conexão de saída foi recuperada com autorização do responsável, chave
-exclusiva e acesso limitado ao encaminhamento necessário. Consulte
-`deploy/YOUTUBE_PROXY.md` para operação e a pendência de instalação no login.
+Um túnel externo recuperou temporariamente a conexão, mas não atende ao
+requisito de execução independente no servidor. A substituição permanente
+depende de validar uma saída aceita pelo YouTube; a alternativa WARP voltou a
+retornar desafio de robô após reiniciar. Consulte `deploy/YOUTUBE_PROXY.md`.
 
 O backend verifica o proxy antes de chamar o extrator e devolve
 `YOUTUBE_PROXY_UNAVAILABLE` nas APIs síncrona e assíncrona. O frontend mantém

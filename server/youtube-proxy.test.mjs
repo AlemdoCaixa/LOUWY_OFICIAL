@@ -18,7 +18,7 @@ test("live tunnel is accepted; closed tunnel returns an actionable error without
   await assert.rejects(checkYoutubeProxy(url), (error) => {
     assert.equal(error.status, 503);
     assert.equal(error.code, "YOUTUBE_PROXY_UNAVAILABLE");
-    assert.match(error.message, /Mac.*ligado/);
+    assert.match(error.message, /serviço de importação.*indisponível/);
     assert.doesNotMatch(error.message, /private|secret/);
     return true;
   });
