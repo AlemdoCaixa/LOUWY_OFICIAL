@@ -4,7 +4,7 @@ import { rename } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
 import { extname, join } from "node:path";
 
-export const MAX_MP3_BYTES = 50 * 1024 * 1024;
+export const MAX_MP3_BYTES = 20 * 1024 * 1024;
 export const MAX_MP3_SECONDS = 2 * 60 * 60;
 
 export function invalidMp3(message = "O arquivo não contém um áudio MP3 válido.") {

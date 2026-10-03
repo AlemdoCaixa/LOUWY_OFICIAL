@@ -4,7 +4,7 @@ A biblioteca e o repertório dos eventos recebem arquivos MP3. O frontend envia
 `POST /api/upload-song` com multipart (`audio`, `title`, `artist`) e acompanha
 `GET /api/import-jobs/:jobId`. A conta autenticada define autor e igreja.
 
-Limites: um arquivo de até 50 MiB e 2 horas, quatro recebimentos simultâneos,
+Limites: um arquivo de até 20 MiB e 2 horas, quatro recebimentos simultâneos,
 um recebimento por conta e a fila compartilhada de mídia de até 20 tarefas.
 O upload usa disco temporário, não memória, e não bloqueia alterações de equipes
 e contas. A validação usa FFprobe e FFmpeg: extensão e MIME não comprovam MP3.

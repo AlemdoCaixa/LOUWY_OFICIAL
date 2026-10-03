@@ -2324,7 +2324,7 @@ app.post("/api/upload-song", (req, res) => {
       if (uploadError) {
         cleanup();
         const tooLarge = uploadError.code === "LIMIT_FILE_SIZE";
-        return res.status(tooLarge ? 413 : 400).json({ error: tooLarge ? "O MP3 pode ter no máximo 50 MB." : uploadError.code === "INVALID_MP3" ? uploadError.message : "Envie um único arquivo MP3 e os dados da música." });
+        return res.status(tooLarge ? 413 : 400).json({ error: tooLarge ? "O MP3 pode ter no máximo 20 MB." : uploadError.code === "INVALID_MP3" ? uploadError.message : "Envie um único arquivo MP3 e os dados da música." });
       }
       if (!req.file?.size) { cleanup(); return res.status(400).json({ error: "Selecione um arquivo MP3 com áudio." }); }
       const hash = await hashMp3(req.file.path);
@@ -2526,11 +2526,15 @@ app.get("/api/stems/:songId", async (req, res) => {
   const catalog = await readCatalog(churchId);
   const song = catalog.find((item) => item.id === songId);
   if (!song) return res.status(404).json({ error: "Música não encontrada." });
+  const job = stemJobs.get(jobKey);
+  // Files can appear before the catalog update commits. Their URLs become
+  // downloadable only after that update, so do not report ready prematurely.
+  if (job?.status === "processing") return res.json(job);
   const ready = song.stems || collectStems(songId, churchId);
   if (ready) {
+    if (!song.stems && !(await updateSong(songId, { stems: ready }, churchId))) return res.status(404).json({ error: "Música não encontrada." });
     return res.json({ status: "ready", stems: ready });
   }
-  const job = stemJobs.get(jobKey);
   return res.json(job || { status: "idle" });
 });
 

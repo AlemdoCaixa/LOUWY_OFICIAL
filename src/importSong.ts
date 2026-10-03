@@ -136,7 +136,7 @@ export async function uploadSong(file: File, metadata: { title: string; artist: 
   };
   if (!/\.mp3$/i.test(file.name)) throw new ImportRequestError("Selecione um arquivo MP3.");
   if (!file.size) throw new ImportRequestError("O arquivo está vazio. Selecione outro MP3.");
-  if (file.size > 50 * 1024 * 1024) throw new ImportRequestError("O MP3 pode ter no máximo 50 MB.");
+  if (file.size > 20 * 1024 * 1024) throw new ImportRequestError("O MP3 pode ter no máximo 20 MB.");
   const body = new FormData();
   body.append("audio", file);
   body.append("title", metadata.title.trim());

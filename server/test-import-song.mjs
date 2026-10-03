@@ -136,7 +136,7 @@ test('MP3 duplicate returns existing song without polling or retransmitting',asy
 
 test('invalid, empty and oversized uploads fail before any request',async()=>{
   let calls=0;
-  for(const [file,message] of [[new File(['x'],'video.mp4'),/Selecione um arquivo MP3/],[new File([],'empty.mp3'),/arquivo está vazio/],[{name:'large.mp3',size:50*1024*1024+1},/50 MB/]]){
+  for(const [file,message] of [[new File(['x'],'video.mp4'),/Selecione um arquivo MP3/],[new File([],'empty.mp3'),/arquivo está vazio/],[{name:'large.mp3',size:20*1024*1024+1},/20 MB/]]){
     await assert.rejects(uploadSong(file,{title:'',artist:''},options(async()=>{calls++;})),message);
   }
   assert.equal(calls,0);

@@ -71,7 +71,7 @@ before(async () => {
     branding: { organizationName: "Test", logoStoredName: "old-logo.png", logoUrl: "/tenant-branding/old-logo.png" },
     members, events: [event, { ...event, id: "event-b", title: "Other event", participants: [{ memberId: "outsider" }], songs: [] }], teams: [], profiles: {}
   }));
-  const songIds = ["AsyncKnown1", "queue-async", "queue-capacity", "song-a", "media-lyrics", "media-stems", "media-key", "queue-blocker", "dedup-lyrics", "dedup-stems", "dedup-key", "key-delete", ...Array.from({ length: 22 }, (_, index) => "queue-" + index)];
+  const songIds = ["publish-stems", "AsyncKnown1", "queue-async", "queue-capacity", "song-a", "media-lyrics", "media-stems", "media-key", "queue-blocker", "dedup-lyrics", "dedup-stems", "dedup-key", "key-delete", ...Array.from({ length: 22 }, (_, index) => "queue-" + index)];
   await writeFile(join(directory, "data", "catalog.json"), JSON.stringify(songIds.map((id) => ({ id, title: "Original title", originalKey: "C" }))));
   await Promise.all(songIds.map((id) => writeFile(join(directory, "data", "audio", id + ".mp3"), "fixture audio")));
   await writeFile(join(directory, "data", "branding", "old-logo.png"), "old logo");
@@ -110,6 +110,7 @@ before(async () => {
       if (key === 'workspace' && (value.branding.organizationName === 'FAIL_SAVE' || value.members.some(m => m.name === 'FAIL_SAVE'))) throw new Error('simulated database failure');
       if (key === 'workspace' && value.teams.some(team => team.name === 'abort-first') && !(churchStates.get(k)?.teams||[]).some(team => team.name === 'abort-first')) { await writeFile(process.env.WORKSPACE_MARKER,'started'); await delay(200); }
       if (key === 'catalog' && value.some(song => song.title === 'Concurrent catalog title')) await delay(150);
+      if (key === 'catalog' && value.some(song => song.id === 'publish-stems' && song.stems)) await delay(300);
       churchStates.set(k,snapshot); return {version:1};
     }
     export async function createChurch({slug,name,workspace,catalog=[]}) { const normalized=normalizeChurchSlug(slug); if([...churches.values()].some(c=>c.slug===normalized)){const error=new Error('taken');error.code='CHURCH_SLUG_TAKEN';throw error;} const church={id:randomUUID(),slug:normalized,name,active:true};churches.set(church.id,church);churchStates.set(churchKey(church.id,'workspace'),structuredClone(workspace));churchStates.set(churchKey(church.id,'catalog'),structuredClone(catalog));return structuredClone(church); }
@@ -541,7 +542,7 @@ test("real MP3 upload validates bytes, deduplicates, isolates jobs and cleans fa
   assert.equal((await submit(fixture,'song.wav')).response.status,400);
   const empty = await submit(new Uint8Array());
   assert.equal(empty.response.status,400);
-  const oversized = await submit(new Uint8Array(50*1024*1024+1));
+  const oversized = await submit(new Uint8Array(20*1024*1024+1));
   assert.equal(oversized.response.status,413);
   for (const bytes of [Buffer.from('<html>renamed as MP3</html>'), await readFile(process.env.MP3_TEST_WAV)]) {
     const invalid = await submit(bytes);
@@ -573,4 +574,17 @@ test("real MP3 upload validates bytes, deduplicates, isolates jobs and cleans fa
   assert.equal((await audio.arrayBuffer()).byteLength,1024);
   assert.deepEqual(await readdir(join(directory,'data','mp3-uploads')),[]);
   assert.equal((await api('/api/catalog/'+song.id,{method:'DELETE'})).response.status,200);
+});
+
+test("stems become ready only after the catalog authorizes their download", async () => {
+  const started=await api('/api/stems/publish-stems',{method:'POST'});
+  assert.equal(started.response.status,202);
+  await eventually(async()=>{try{await access(join(directory,'data','stems','test-church','publish-stems','test_(Vocals)_stem.mp3'));return true;}catch{return false;}});
+  assert.equal((await api('/api/stems/publish-stems')).data.status,'processing');
+  await eventually(async()=> (await api('/api/stems/publish-stems')).data.status==='ready');
+  const stems=(await api('/api/stems/publish-stems')).data.stems;
+  const response=await fetch(baseUrl+stems.vocals,{headers:{Cookie:cookies.master}});
+  assert.equal(response.status,200);
+  assert.equal(await response.text(),'test');
+  await api('/api/catalog/publish-stems',{method:'DELETE'});
 });
